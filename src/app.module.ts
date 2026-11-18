@@ -4,12 +4,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { databaseAsyncConfig } from './config/database.config.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { UsuariosModule } from './usuarios/usuarios.module.js';
 import { AlimentacionController } from './alimentacion/alimentacion.controller.js';
 import { AlimentacionesService } from './alimentacion/alimentaciones.service.js';
 import { CitasController } from './citas/citas.controller.js';
 import { CitasService } from './citas/citas.service.js';
-import { UsuariosController } from './usuarios/usuarios.controller.js';
-import { UsuariosService } from './usuarios/usuarios.service.js';
 import { VacunasController } from './vacunas/vacunas.controller.js';
 import { VacunasService } from './vacunas/vacunas.service.js';
 import { HistoriasClinicasController } from './historias-clinicas/historias-clinicas.controller.js';
@@ -26,12 +25,12 @@ import { MascotasService } from './mascotas/mascotas.service.js';
       envFilePath: '.env',
     }),
     TypeOrmModule.forRootAsync(databaseAsyncConfig),
+    UsuariosModule,
   ],
   controllers: [
     AppController,
     AlimentacionController,
     CitasController,
-    UsuariosController,
     VacunasController,
     HistoriasClinicasController,
     MedicamentosController,
@@ -41,7 +40,6 @@ import { MascotasService } from './mascotas/mascotas.service.js';
     AppService,
     AlimentacionesService,
     CitasService,
-    UsuariosService,
     VacunasService,
     HistoriasClinicasService,
     MedicamentosService,
