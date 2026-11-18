@@ -5,7 +5,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { RolUsuario } from './usuario.dto.js';
-import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import type { MascotaEntity } from '../mascotas/mascota.entity.js';
 
 @Entity({ name: 'usuarios' })
 export class UsuarioEntity {
@@ -54,7 +54,7 @@ export class UsuarioEntity {
   })
   estado: boolean;
 
-  @OneToMany(() => MascotaEntity, (mascota) => mascota.usuario)
+  @OneToMany('MascotaEntity', 'usuario')
   mascotas: MascotaEntity[];
 }
 
