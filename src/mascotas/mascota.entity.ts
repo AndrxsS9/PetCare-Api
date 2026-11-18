@@ -3,10 +3,11 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { EspecieMascota } from './mascota.dto.js';
-import { UsuarioEntity } from '../usuarios/usuario.entity.js';
+import type { UsuarioEntity } from '../usuarios/usuario.entity.js';
 
 @Entity({ name: 'mascotas' })
 export class MascotaEntity {
@@ -66,10 +67,9 @@ export class MascotaEntity {
   })
   estado: boolean;
 
-  @ManyToOne(() => UsuarioEntity, (usuario) => usuario.mascotas, {
+  @ManyToOne('UsuarioEntity', 'mascotas', {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'usuarioId' })
   usuario: UsuarioEntity;
 }
-

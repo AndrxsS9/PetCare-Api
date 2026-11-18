@@ -5,7 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import type { MascotaEntity } from '../mascotas/mascota.entity.js';
 
 @Entity({ name: 'vacunas' })
 export class VacunaEntity {
@@ -51,7 +51,7 @@ export class VacunaEntity {
   })
   proximaDosis: Date;
 
-  @ManyToOne(() => MascotaEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'mascota_id' })
-  mascota: MascotaEntity;
+  @ManyToOne('MascotaEntity', 'vacunas', { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'mascotaId' })
+  mascota: any;
 }

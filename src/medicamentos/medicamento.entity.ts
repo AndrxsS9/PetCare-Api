@@ -5,7 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import type { MascotaEntity } from '../mascotas/mascota.entity.js';
 
 @Entity({ name: 'medicamentos' })
 export class MedicamentoEntity {
@@ -63,7 +63,7 @@ export class MedicamentoEntity {
   })
   estado: boolean;
 
-  @ManyToOne(() => MascotaEntity, { onDelete: 'CASCADE' })
+  @ManyToOne('MascotaEntity', 'medicamentos', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mascotaId' })
-  mascota: MascotaEntity;
+  mascota: any;
 }

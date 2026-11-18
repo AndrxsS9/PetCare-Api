@@ -57,6 +57,48 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## PetCare API — Infraestructura, Usuarios y Mascotas (Edgar)
+
+### Variables de Entorno y Configuración de Base de Datos
+El proyecto utiliza PostgreSQL y TypeORM con configuración centralizada y asíncrona mediante `@nestjs/config`.
+
+1. Copiar el archivo de variables de entorno de ejemplo:
+```bash
+cp .env.example .env
+```
+2. Configurar las credenciales en `.env`:
+```env
+PORT=3000
+NODE_ENV=development
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=tu_password
+DB_NAME=petcare_db
+
+# En producción, synchronize siempre es forzado a false
+DB_SYNCHRONIZE=true
+DB_LOGGING=false
+DB_SSL=false
+```
+
+### Endpoints Implementados
+
+#### Módulo de Usuarios (`/usuarios`)
+- `GET /usuarios`: Obtiene todos los usuarios registrados (excluyendo contraseñas).
+- `GET /usuarios/:id`: Obtiene el usuario por UUID incluyendo sus mascotas asociadas (sin contraseñas). Retorna `404` si no existe.
+- `POST /usuarios`: Registra un nuevo usuario con contraseña cifrada mediante `bcrypt` y valida unicidad de correo (`409` si ya existe).
+- `PUT /usuarios/:id`: Actualiza datos de un usuario. Si se actualiza contraseña se cifra automáticamente.
+- `DELETE /usuarios/:id`: Elimina un usuario por UUID (`404` si no existe).
+
+#### Módulo de Mascotas (`/mascotas`)
+- `GET /mascotas`: Lista todas las mascotas junto con la información de su dueño/usuario (sin contraseñas).
+- `GET /mascotas/:id`: Consulta los detalles de una mascota por UUID y su relación con el usuario dueño.
+- `POST /mascotas`: Registra una mascota validando obligatoriamente que `usuarioId` pertenezca a un usuario existente en PostgreSQL (`404` si el usuario no existe).
+- `PUT /mascotas/:id`: Modifica los datos de una mascota. Valida la existencia del nuevo usuario si se cambia `usuarioId`.
+- `DELETE /mascotas/:id`: Elimina la mascota (`404` si no existe).
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

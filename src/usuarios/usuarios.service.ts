@@ -1,87 +1,136 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Usuario } from './usuario.model.js';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import bcrypt from 'bcrypt';
+import { UsuarioEntity } from './usuario.entity.js';
 import { CreateUsuarioDto, UpdateUsuarioDto } from './usuario.dto.js';
+
+export type UsuarioResponse = Omit<UsuarioEntity, 'password'>;
 
 @Injectable()
 export class UsuariosService {
-  private usuarios: Usuario[] = [
-    {
-      id: '1',
-      nombre: 'Carlos Pérez',
-      email: 'carlos@correo.com',
-      password: '123456',
-      telefono: '3001234567',
-      rol: 'DUENO',
-      estado: true,
-    },
-    {
-      id: '2',
-      nombre: 'Dra. Ana Ruiz',
-      email: 'ana@veterinaria.com',
-      password: '123456',
-      telefono: '3109876543',
-      rol: 'VETERINARIO',
-      estado: true,
-    },
-    {
-      id: '3',
-      nombre: 'Admin Sistema',
-      email: 'admin@petcare.com',
-      password: 'admin123',
-      telefono: '3205551234',
-      rol: 'ADMIN',
-      estado: true,
-    },
-  ];
+  constructor(
+    @InjectRepository(UsuarioEntity)
+    private readonly usuarioRepository: Repository<UsuarioEntity>,
+  ) {}
 
-  findAll() {
-    return this.usuarios;
+  private sanitizeUser(usuario: UsuarioEntity): UsuarioResponse {
+    const { password: _, ...usuarioSinPassword } = usuario;
+    return usuarioSinPassword;
   }
 
-  findById(id: string) {
-    const data = this.usuarios.find((usuario) => usuario.id === id);
-    if (data === undefined) {
+  async findAll(): Promise<UsuarioResponse[]> {
+    const usuarios = await this.usuarioRepository.find();
+    return usuarios.map((u) => this.sanitizeUser(u));
+  }
+
+  async findById(id: string): Promise<{ message: string; data: UsuarioResponse }> {
+    const usuario = await this.usuarioRepository.findOne({
+      where: { id },
+      relations: { mascotas: true },
+    });
+
+    if (!usuario) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
+
     return {
       message: 'Usuario encontrado',
-      data,
+      data: this.sanitizeUser(usuario),
     };
   }
 
-  create(usuarioPayload: CreateUsuarioDto) {
-    const newUsuario: Usuario = {
+  async findEntityById(id: string): Promise<UsuarioEntity> {
+    const usuario = await this.usuarioRepository.findOne({ where: { id } });
+    if (!usuario) {
+      throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
+    }
+    return usuario;
+  }
+
+  async create(
+    usuarioPayload: CreateUsuarioDto,
+  ): Promise<{ message: string; data: UsuarioResponse }> {
+    const existing = await this.usuarioRepository.findOne({
+      where: { email: usuarioPayload.email },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        `El correo electrónico ${usuarioPayload.email} ya se encuentra registrado`,
+      );
+    }
+
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(usuarioPayload.password, saltRounds);
+
+    const newUsuario = this.usuarioRepository.create({
       ...usuarioPayload,
-      id: `${new Date().getTime()}`,
+      password: hashedPassword,
       estado: usuarioPayload.estado ?? true,
-    };
-    this.usuarios.push(newUsuario);
+    });
+
+    const savedUsuario = await this.usuarioRepository.save(newUsuario);
+
     return {
       message: 'Usuario creado con éxito',
-      data: newUsuario,
+      data: this.sanitizeUser(savedUsuario),
     };
   }
 
-  update(id: string, usuarioChanges: UpdateUsuarioDto) {
-    const position = this.usuarios.findIndex((usuario) => usuario.id === id);
-    if (position === -1) {
+  async update(
+    id: string,
+    usuarioChanges: UpdateUsuarioDto,
+  ): Promise<{ message: string; data: UsuarioResponse }> {
+    const usuario = await this.usuarioRepository.findOne({ where: { id } });
+
+    if (!usuario) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
-    const existingUsuario = this.usuarios[position];
-    const updatedUsuario = { ...existingUsuario, ...usuarioChanges };
-    this.usuarios[position] = updatedUsuario;
+
+    if (usuarioChanges.email && usuarioChanges.email !== usuario.email) {
+      const existingEmail = await this.usuarioRepository.findOne({
+        where: { email: usuarioChanges.email },
+      });
+      if (existingEmail) {
+        throw new ConflictException(
+          `El correo electrónico ${usuarioChanges.email} ya se encuentra registrado`,
+        );
+      }
+    }
+
+    if (usuarioChanges.password) {
+      const saltRounds = 10;
+      usuario.password = await bcrypt.hash(usuarioChanges.password, saltRounds);
+    }
+
+    if (usuarioChanges.nombre !== undefined) usuario.nombre = usuarioChanges.nombre;
+    if (usuarioChanges.email !== undefined) usuario.email = usuarioChanges.email;
+    if (usuarioChanges.telefono !== undefined) usuario.telefono = usuarioChanges.telefono;
+    if (usuarioChanges.rol !== undefined) usuario.rol = usuarioChanges.rol;
+    if (usuarioChanges.estado !== undefined) usuario.estado = usuarioChanges.estado;
+
+    const updatedUsuario = await this.usuarioRepository.save(usuario);
+
     return {
       message: 'Usuario actualizado con éxito',
-      data: updatedUsuario,
+      data: this.sanitizeUser(updatedUsuario),
     };
   }
 
-  delete(id: string) {
-    const position = this.usuarios.findIndex((usuario) => usuario.id === id);
-    if (position === -1) {
+  async delete(id: string): Promise<{ message: string }> {
+    const usuario = await this.usuarioRepository.findOne({ where: { id } });
+
+    if (!usuario) {
       throw new NotFoundException(`Usuario con ID ${id} no encontrado`);
     }
-    this.usuarios.splice(position, 1);
+
+    await this.usuarioRepository.remove(usuario);
+
     return {
       message: 'Usuario eliminado con éxito',
     };

@@ -6,6 +6,8 @@ import {
   IsOptional,
   IsString,
   IsDateString,
+  IsUUID,
+  IsPositive,
 } from 'class-validator';
 
 export enum EspecieMascota {
@@ -16,28 +18,29 @@ export enum EspecieMascota {
 }
 
 export class CreateMascotaDto {
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID('all', { message: 'usuarioId debe ser un UUID válido' })
+  @IsNotEmpty({ message: 'usuarioId es obligatorio' })
   usuarioId: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'El nombre debe ser una cadena de texto' })
+  @IsNotEmpty({ message: 'El nombre es obligatorio' })
   nombre: string;
 
-  @IsEnum(EspecieMascota)
-  @IsNotEmpty()
+  @IsEnum(EspecieMascota, { message: 'La especie debe ser PERRO, GATO, AVE u OTRO' })
+  @IsNotEmpty({ message: 'La especie es obligatoria' })
   especie: EspecieMascota;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'La raza debe ser una cadena de texto' })
+  @IsNotEmpty({ message: 'La raza es obligatoria' })
   raza: string;
 
-  @IsDateString()
-  @IsNotEmpty()
+  @IsDateString({}, { message: 'fecha_nacimiento debe ser una fecha válida (YYYY-MM-DD)' })
+  @IsNotEmpty({ message: 'La fecha de nacimiento es obligatoria' })
   fecha_nacimiento: Date;
 
-  @IsNumber()
-  @IsNotEmpty()
+  @IsNumber({}, { message: 'El peso debe ser un número' })
+  @IsPositive({ message: 'El peso debe ser un número positivo' })
+  @IsNotEmpty({ message: 'El peso es obligatorio' })
   peso: number;
 
   @IsString()
@@ -50,11 +53,15 @@ export class CreateMascotaDto {
 }
 
 export class UpdateMascotaDto {
+  @IsUUID('all', { message: 'usuarioId debe ser un UUID válido' })
+  @IsOptional()
+  usuarioId?: string;
+
   @IsString()
   @IsOptional()
   nombre?: string;
 
-  @IsEnum(EspecieMascota)
+  @IsEnum(EspecieMascota, { message: 'La especie debe ser PERRO, GATO, AVE u OTRO' })
   @IsOptional()
   especie?: EspecieMascota;
 
@@ -62,11 +69,12 @@ export class UpdateMascotaDto {
   @IsOptional()
   raza?: string;
 
-  @IsDateString()
+  @IsDateString({}, { message: 'fecha_nacimiento debe ser una fecha válida (YYYY-MM-DD)' })
   @IsOptional()
   fecha_nacimiento?: Date;
 
-  @IsNumber()
+  @IsNumber({}, { message: 'El peso debe ser un número' })
+  @IsPositive({ message: 'El peso debe ser un número positivo' })
   @IsOptional()
   peso?: number;
 
