@@ -5,6 +5,7 @@ import { databaseAsyncConfig } from './config/database.config.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
+import { MascotasModule } from './mascotas/mascotas.module.js';
 import { AlimentacionController } from './alimentacion/alimentacion.controller.js';
 import { AlimentacionesService } from './alimentacion/alimentaciones.service.js';
 import { CitasController } from './citas/citas.controller.js';
@@ -15,8 +16,6 @@ import { HistoriasClinicasController } from './historias-clinicas/historias-clin
 import { HistoriasClinicasService } from './historias-clinicas/historias-clinicas.service.js';
 import { MedicamentosController } from './medicamentos/medicamentos.controller.js';
 import { MedicamentosService } from './medicamentos/medicamentos.service.js';
-import { MascotasController } from './mascotas/mascotas.controller.js';
-import { MascotasService } from './mascotas/mascotas.service.js';
 
 @Module({
   imports: [
@@ -26,6 +25,7 @@ import { MascotasService } from './mascotas/mascotas.service.js';
     }),
     TypeOrmModule.forRootAsync(databaseAsyncConfig),
     UsuariosModule,
+    MascotasModule,
   ],
   controllers: [
     AppController,
@@ -34,7 +34,6 @@ import { MascotasService } from './mascotas/mascotas.service.js';
     VacunasController,
     HistoriasClinicasController,
     MedicamentosController,
-    MascotasController,
   ],
   providers: [
     AppService,
@@ -43,7 +42,6 @@ import { MascotasService } from './mascotas/mascotas.service.js';
     VacunasService,
     HistoriasClinicasService,
     MedicamentosService,
-    MascotasService,
   ],
 })
 export class AppModule {}

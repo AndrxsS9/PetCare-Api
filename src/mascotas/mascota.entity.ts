@@ -3,10 +3,15 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { EspecieMascota } from './mascota.dto.js';
 import { UsuarioEntity } from '../usuarios/usuario.entity.js';
+import { CitaEntity } from '../citas/cita.entity.js';
+import { HistoriaClinicaEntity } from '../historias-clinicas/historia-clinica.entity.js';
+import { MedicamentoEntity } from '../medicamentos/medicamento.entity.js';
+import { VacunaEntity } from '../vacunas/vacuna.entity.js';
 
 @Entity({ name: 'mascotas' })
 export class MascotaEntity {
@@ -71,5 +76,16 @@ export class MascotaEntity {
   })
   @JoinColumn({ name: 'usuarioId' })
   usuario: UsuarioEntity;
-}
 
+  @OneToMany(() => CitaEntity, (cita) => cita.mascota)
+  citas?: CitaEntity[];
+
+  @OneToMany(() => HistoriaClinicaEntity, (historia) => historia.mascota)
+  historiasClinicas?: HistoriaClinicaEntity[];
+
+  @OneToMany(() => MedicamentoEntity, (medicamento) => medicamento.mascota)
+  medicamentos?: MedicamentoEntity[];
+
+  @OneToMany(() => VacunaEntity, (vacuna) => vacuna.mascota)
+  vacunas?: VacunaEntity[];
+}
