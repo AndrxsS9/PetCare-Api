@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { databaseAsyncConfig } from './config/database.config.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AlimentacionController } from './alimentacion/alimentacion.controller.js';
@@ -17,7 +20,13 @@ import { MascotasController } from './mascotas/mascotas.controller.js';
 import { MascotasService } from './mascotas/mascotas.service.js';
 
 @Module({
-  imports: [],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    TypeOrmModule.forRootAsync(databaseAsyncConfig),
+  ],
   controllers: [
     AppController,
     AlimentacionController,
