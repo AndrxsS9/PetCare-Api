@@ -20,7 +20,7 @@ export class CreateCitaDto {
 
   @IsDateString()
   @IsNotEmpty()
-  fechaHora: Date;
+  fechaHora: string;
 
   @IsString()
   @IsNotEmpty()
@@ -38,7 +38,7 @@ export class CreateCitaDto {
 export class UpdateCitaDto {
   @IsDateString()
   @IsOptional()
-  fechaHora?: Date;
+  fechaHora?: string;
 
   @IsString()
   @IsOptional()
