@@ -1,5 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { HistoriaClinica } from './historia-clinica.model.js';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { HistoriaClinicaEntity } from './historia-clinica.entity.js';
+import { MascotaEntity } from '../mascotas/mascota.entity.js';
 import {
   CreateHistoriaClinicaDto,
   UpdateHistoriaClinicaDto,
@@ -7,87 +10,111 @@ import {
 
 @Injectable()
 export class HistoriasClinicasService {
-  private historiasClinicas: HistoriaClinica[] = [
-    {
-      id: '1',
-      mascotaId: '1',
-      fechaConsulta: new Date('2024-06-10T10:00:00'),
-      diagnostico: 'Buen estado general',
-      observaciones: 'Continuar con alimentación actual',
-      pesoRegistrado: 28.5,
-      veterinarioResponsable: 'Dra. Ana Ruiz',
-    },
-    {
-      id: '2',
-      mascotaId: '2',
-      fechaConsulta: new Date('2024-07-20T14:30:00'),
-      diagnostico: 'Control de rutina',
-      observaciones: '',
-      pesoRegistrado: 4.2,
-      veterinarioResponsable: 'Dra. Ana Ruiz',
-    },
-  ];
+  constructor(
+    @InjectRepository(HistoriaClinicaEntity)
+    private readonly historiaRepository: Repository<HistoriaClinicaEntity>,
+    @InjectRepository(MascotaEntity)
+    private readonly mascotaRepository: Repository<MascotaEntity>,
+  ) {}
 
-  findAll() {
-    return this.historiasClinicas;
+  async findAll(): Promise<HistoriaClinicaEntity[]> {
+    return this.historiaRepository.find();
   }
 
-  findById(id: string) {
-    const data = this.historiasClinicas.find(
-      (historia) => historia.id === id,
-    );
-    if (data === undefined) {
+  async findById(
+    id: string,
+  ): Promise<{ message: string; data: HistoriaClinicaEntity }> {
+    const data = await this.historiaRepository.findOne({ where: { id } });
+
+    if (!data) {
       throw new NotFoundException(
         `Historia clínica con ID ${id} no encontrada`,
       );
     }
+
     return {
       message: 'Historia clínica encontrada',
       data,
     };
   }
 
-  create(historiaPayload: CreateHistoriaClinicaDto) {
-    const newHistoria: HistoriaClinica = {
-      ...historiaPayload,
-      id: `${new Date().getTime()}`,
+  async create(
+    historiaPayload: CreateHistoriaClinicaDto,
+  ): Promise<{ message: string; data: HistoriaClinicaEntity }> {
+    const mascota = await this.mascotaRepository.findOne({
+      where: { id: historiaPayload.mascotaId },
+    });
+
+    if (!mascota) {
+      throw new NotFoundException(
+        `Mascota con ID ${historiaPayload.mascotaId} no encontrada`,
+      );
+    }
+
+    const newHistoria = this.historiaRepository.create({
+      mascotaId: historiaPayload.mascotaId,
+      fechaConsulta: new Date(historiaPayload.fechaConsulta),
+      diagnostico: historiaPayload.diagnostico,
       observaciones: historiaPayload.observaciones ?? '',
-    };
-    this.historiasClinicas.push(newHistoria);
+      pesoRegistrado: historiaPayload.pesoRegistrado,
+      veterinarioResponsable: historiaPayload.veterinarioResponsable,
+    });
+
+    const data = await this.historiaRepository.save(newHistoria);
+
     return {
       message: 'Historia clínica creada con éxito',
-      data: newHistoria,
+      data,
     };
   }
 
-  update(id: string, historiaChanges: UpdateHistoriaClinicaDto) {
-    const position = this.historiasClinicas.findIndex(
-      (historia) => historia.id === id,
-    );
-    if (position === -1) {
+  async update(
+    id: string,
+    historiaChanges: UpdateHistoriaClinicaDto,
+  ): Promise<{ message: string; data: HistoriaClinicaEntity }> {
+    const historia = await this.historiaRepository.findOne({ where: { id } });
+
+    if (!historia) {
       throw new NotFoundException(
         `Historia clínica con ID ${id} no encontrada`,
       );
     }
-    const existingHistoria = this.historiasClinicas[position];
-    const updatedHistoria = { ...existingHistoria, ...historiaChanges };
-    this.historiasClinicas[position] = updatedHistoria;
+
+    const changes: Partial<HistoriaClinicaEntity> = {};
+    if (historiaChanges.fechaConsulta !== undefined) {
+      changes.fechaConsulta = new Date(historiaChanges.fechaConsulta);
+    }
+    if (historiaChanges.diagnostico !== undefined) {
+      changes.diagnostico = historiaChanges.diagnostico;
+    }
+    if (historiaChanges.observaciones !== undefined) {
+      changes.observaciones = historiaChanges.observaciones;
+    }
+    if (historiaChanges.pesoRegistrado !== undefined) {
+      changes.pesoRegistrado = historiaChanges.pesoRegistrado;
+    }
+    if (historiaChanges.veterinarioResponsable !== undefined) {
+      changes.veterinarioResponsable = historiaChanges.veterinarioResponsable;
+    }
+
+    const updatedHistoria = this.historiaRepository.merge(historia, changes);
+    const data = await this.historiaRepository.save(updatedHistoria);
+
     return {
       message: 'Historia clínica actualizada con éxito',
-      data: updatedHistoria,
+      data,
     };
   }
 
-  delete(id: string) {
-    const position = this.historiasClinicas.findIndex(
-      (historia) => historia.id === id,
-    );
-    if (position === -1) {
+  async delete(id: string): Promise<{ message: string }> {
+    const result = await this.historiaRepository.delete(id);
+
+    if (!result.affected) {
       throw new NotFoundException(
         `Historia clínica con ID ${id} no encontrada`,
       );
     }
-    this.historiasClinicas.splice(position, 1);
+
     return {
       message: 'Historia clínica eliminada con éxito',
     };

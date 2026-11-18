@@ -4,16 +4,17 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateHistoriaClinicaDto {
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   mascotaId: string;
 
   @IsDateString()
   @IsNotEmpty()
-  fechaConsulta: Date;
+  fechaConsulta: string;
 
   @IsString()
   @IsNotEmpty()
@@ -35,7 +36,7 @@ export class CreateHistoriaClinicaDto {
 export class UpdateHistoriaClinicaDto {
   @IsDateString()
   @IsOptional()
-  fechaConsulta?: Date;
+  fechaConsulta?: string;
 
   @IsString()
   @IsOptional()
