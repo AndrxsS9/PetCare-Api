@@ -1,92 +1,134 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Medicamento } from './medicamento.model.js';
-import { CreateMedicamentoDto, UpdateMedicamentoDto } from './medicamento.dto.js';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { MedicamentoEntity } from './medicamento.entity.js';
+import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import {
+  CreateMedicamentoDto,
+  UpdateMedicamentoDto,
+} from './medicamento.dto.js';
+// Reuses the timezone-safe ISO -> `date` column conversion validated in
+// Vacunas: it keeps the calendar day written by the client regardless of the
+// server timezone.
+import { toCalendarDate } from '../vacunas/vacunas.service.js';
 
 @Injectable()
 export class MedicamentosService {
-  private medicamentos: Medicamento[] = [
-    {
-      id: '1',
-      mascotaId: '1',
-      nombreMedicamento: 'Amoxicilina',
-      dosis: '250 mg',
-      frecuencia: 'Cada 12 horas',
-      inicio: new Date('2024-06-10'),
-      fin: new Date('2024-06-17'),
-      observaciones: 'Administrar después de comer',
-      estado: true,
-    },
-    {
-      id: '2',
-      mascotaId: '2',
-      nombreMedicamento: 'Desparasitante',
-      dosis: '1 tableta',
-      frecuencia: 'Dosis única',
-      inicio: new Date('2024-07-20'),
-      fin: new Date('2024-07-20'),
-      observaciones: '',
-      estado: false,
-    },
-  ];
+  constructor(
+    @InjectRepository(MedicamentoEntity)
+    private readonly medicamentoRepository: Repository<MedicamentoEntity>,
+    @InjectRepository(MascotaEntity)
+    private readonly mascotaRepository: Repository<MascotaEntity>,
+  ) {}
 
-  findAll() {
-    return this.medicamentos;
+  async findAll(): Promise<MedicamentoEntity[]> {
+    return this.medicamentoRepository.find();
   }
 
-  findById(id: string) {
-    const data = this.medicamentos.find(
-      (medicamento) => medicamento.id === id,
-    );
-    if (data === undefined) {
+  async findById(
+    id: string,
+  ): Promise<{ message: string; data: MedicamentoEntity }> {
+    const data = await this.medicamentoRepository.findOne({ where: { id } });
+
+    if (!data) {
       throw new NotFoundException(`Medicamento con ID ${id} no encontrado`);
     }
+
     return {
       message: 'Medicamento encontrado',
       data,
     };
   }
 
-  create(medicamentoPayload: CreateMedicamentoDto) {
-    const newMedicamento: Medicamento = {
-      ...medicamentoPayload,
-      id: `${new Date().getTime()}`,
+  async create(
+    medicamentoPayload: CreateMedicamentoDto,
+  ): Promise<{ message: string; data: MedicamentoEntity }> {
+    const mascota = await this.mascotaRepository.findOne({
+      where: { id: medicamentoPayload.mascotaId },
+    });
+
+    if (!mascota) {
+      throw new NotFoundException(
+        `Mascota con ID ${medicamentoPayload.mascotaId} no encontrada`,
+      );
+    }
+
+    const newMedicamento = this.medicamentoRepository.create({
+      mascotaId: medicamentoPayload.mascotaId,
+      nombreMedicamento: medicamentoPayload.nombreMedicamento,
+      dosis: medicamentoPayload.dosis,
+      frecuencia: medicamentoPayload.frecuencia,
+      inicio: toCalendarDate(medicamentoPayload.inicio),
+      fin: toCalendarDate(medicamentoPayload.fin),
       observaciones: medicamentoPayload.observaciones ?? '',
       estado: medicamentoPayload.estado ?? true,
-    };
-    this.medicamentos.push(newMedicamento);
+    });
+
+    const data = await this.medicamentoRepository.save(newMedicamento);
+
     return {
       message: 'Medicamento creado con éxito',
-      data: newMedicamento,
+      data,
     };
   }
 
-  update(id: string, medicamentoChanges: UpdateMedicamentoDto) {
-    const position = this.medicamentos.findIndex(
-      (medicamento) => medicamento.id === id,
-    );
-    if (position === -1) {
+  async update(
+    id: string,
+    medicamentoChanges: UpdateMedicamentoDto,
+  ): Promise<{ message: string; data: MedicamentoEntity }> {
+    const medicamento = await this.medicamentoRepository.findOne({
+      where: { id },
+    });
+
+    if (!medicamento) {
       throw new NotFoundException(`Medicamento con ID ${id} no encontrado`);
     }
-    const existingMedicamento = this.medicamentos[position];
-    const updatedMedicamento = {
-      ...existingMedicamento,
-      ...medicamentoChanges,
-    };
-    this.medicamentos[position] = updatedMedicamento;
+
+    // Only allowed fields are copied, so `id` and `mascotaId` can never be
+    // changed through this method even if they reach it. `!== undefined`
+    // keeps an explicit `estado: false`.
+    const changes: Partial<MedicamentoEntity> = {};
+    if (medicamentoChanges.nombreMedicamento !== undefined) {
+      changes.nombreMedicamento = medicamentoChanges.nombreMedicamento;
+    }
+    if (medicamentoChanges.dosis !== undefined) {
+      changes.dosis = medicamentoChanges.dosis;
+    }
+    if (medicamentoChanges.frecuencia !== undefined) {
+      changes.frecuencia = medicamentoChanges.frecuencia;
+    }
+    if (medicamentoChanges.inicio !== undefined) {
+      changes.inicio = toCalendarDate(medicamentoChanges.inicio);
+    }
+    if (medicamentoChanges.fin !== undefined) {
+      changes.fin = toCalendarDate(medicamentoChanges.fin);
+    }
+    if (medicamentoChanges.observaciones !== undefined) {
+      changes.observaciones = medicamentoChanges.observaciones;
+    }
+    if (medicamentoChanges.estado !== undefined) {
+      changes.estado = medicamentoChanges.estado;
+    }
+
+    const updatedMedicamento = this.medicamentoRepository.merge(
+      medicamento,
+      changes,
+    );
+    const data = await this.medicamentoRepository.save(updatedMedicamento);
+
     return {
       message: 'Medicamento actualizado con éxito',
-      data: updatedMedicamento,
+      data,
     };
   }
 
-  delete(id: string) {
-    const position = this.medicamentos.findIndex(
-      (medicamento) => medicamento.id === id,
-    );
-    if (position === -1) {
+  async delete(id: string): Promise<{ message: string }> {
+    const result = await this.medicamentoRepository.delete(id);
+
+    if (!result.affected) {
       throw new NotFoundException(`Medicamento con ID ${id} no encontrado`);
     }
-    this.medicamentos.splice(position, 1);
+
     return {
       message: 'Medicamento eliminado con éxito',
     };

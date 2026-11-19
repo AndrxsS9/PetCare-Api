@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { CreateVacunaDto, UpdateVacunaDto } from './vacuna.dto.js';
 import { VacunasService } from './vacunas.service.js';
 
@@ -12,7 +21,7 @@ export class VacunasController {
   }
 
   @Get(':id')
-  getVacunaById(@Param('id') id: string) {
+  getVacunaById(@Param('id', ParseUUIDPipe) id: string) {
     return this.vacunasService.findById(id);
   }
 
@@ -22,12 +31,15 @@ export class VacunasController {
   }
 
   @Put(':id')
-  updateVacuna(@Param('id') id: string, @Body() vacunaChanges: UpdateVacunaDto) {
+  updateVacuna(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() vacunaChanges: UpdateVacunaDto,
+  ) {
     return this.vacunasService.update(id, vacunaChanges);
   }
 
   @Delete(':id')
-  deleteVacuna(@Param('id') id: string) {
+  deleteVacuna(@Param('id', ParseUUIDPipe) id: string) {
     return this.vacunasService.delete(id);
   }
 }

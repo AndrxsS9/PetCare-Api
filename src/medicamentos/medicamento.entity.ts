@@ -63,7 +63,10 @@ export class MedicamentoEntity {
   })
   estado: boolean;
 
-  @ManyToOne('MascotaEntity', 'medicamentos', { onDelete: 'CASCADE' })
+  // Unidirectional: MascotaEntity has no `medicamentos` inverse property. The
+  // join column reuses the scalar `mascotaId` column above, so TypeORM does
+  // not generate a second foreign-key column.
+  @ManyToOne('MascotaEntity', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mascotaId' })
-  mascota: any;
+  mascota: MascotaEntity;
 }
