@@ -51,7 +51,9 @@ export class VacunaEntity {
   })
   proximaDosis: Date;
 
-  @ManyToOne('MascotaEntity', 'vacunas', { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'mascotaId' })
-  mascota: any;
+  // The join column reuses the scalar `mascota_id` column above, so TypeORM
+  // does not generate a second foreign-key column.
+  @ManyToOne('MascotaEntity', { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'mascota_id' })
+  mascota: MascotaEntity;
 }

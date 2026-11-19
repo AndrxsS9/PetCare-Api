@@ -8,8 +8,7 @@ import { UsuariosModule } from './usuarios/usuarios.module.js';
 import { MascotasModule } from './mascotas/mascotas.module.js';
 import { AlimentacionModule } from './alimentacion/alimentacion.module.js';
 import { CitasModule } from './citas/citas.module.js';
-import { VacunasController } from './vacunas/vacunas.controller.js';
-import { VacunasService } from './vacunas/vacunas.service.js';
+import { VacunasModule } from './vacunas/vacunas.module.js';
 import { HistoriasClinicasModule } from './historias-clinicas/historias-clinicas.module.js';
 import { MedicamentosController } from './medicamentos/medicamentos.controller.js';
 import { MedicamentosService } from './medicamentos/medicamentos.service.js';
@@ -26,15 +25,14 @@ import { MedicamentosService } from './medicamentos/medicamentos.service.js';
     CitasModule,
     HistoriasClinicasModule,
     AlimentacionModule,
+    VacunasModule,
   ],
   controllers: [
     AppController,
-    VacunasController,
     MedicamentosController,
   ],
   providers: [
     AppService,
-    VacunasService,
     MedicamentosService,
   ],
 })
