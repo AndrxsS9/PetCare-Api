@@ -1,0 +1,1962 @@
+{
+  "info": {
+    "_postman_id": "12c4b8d2-e655-4726-8c6c-457dcc83451e",
+    "name": "PetCare API",
+    "description": "Colección de la PetCare API (NestJS + TypeORM + PostgreSQL).\n\n**Úsela solo contra una base de datos de desarrollo.** La API no tiene autenticación.\n\n## Orden recomendado\n1. **Usuarios → Crear usuario** (guarda `usuarioId`).\n2. **Mascotas → Crear mascota** del usuario de prueba (guarda `mascotaId`).\n3. **Crear** registros en Citas, Historias Clínicas, Alimentación, Vacunas y Medicamentos (guardan su id).\n4. **Consultar y actualizar** los registros creados (GET y PUT).\n5. **Opcional:** eliminar solo los registros de prueba.\n\nCon el Collection Runner, la colección completa sigue ese orden.\n\n## Eliminación\nLos DELETE se omiten mientras `permitirEliminacion` sea `false` (valor por defecto). Para eliminar los registros de prueba, cámbiela a `true` y ejecute los DELETE manualmente, de los registros dependientes hacia la mascota y el usuario. Eliminar una mascota o un usuario borra en cascada sus registros asociados. Las variables de id solo se rellenan con los registros que crea esta colección.\n\n## Variables\n- `baseUrl`: URL de la API (por defecto http://localhost:3000).\n- `usuarioPassword`: contraseña de muestra del usuario de prueba (no use contraseñas reales).\n- `usuarioId`, `mascotaId`, `citaId`, `historiaClinicaId`, `alimentacionId`, `vacunaId`, `medicamentoId`: se rellenan automáticamente con los POST.\n- `permitirEliminacion`: `false` por defecto.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Estado de la API",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Código 200', () => pm.response.to.have.status(200));",
+              "pm.test('La API responde', () => pm.expect(pm.response.text()).to.include('PetCare API funcionando!'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            ""
+          ]
+        },
+        "description": "Comprueba que el servidor está en ejecución."
+      }
+    },
+    {
+      "name": "Usuarios",
+      "description": "Usuarios del sistema (DUENO, VETERINARIO o ADMIN). La contraseña se cifra con bcrypt y nunca se devuelve. El correo debe ser único (409 si ya existe). En este módulo el :id no se valida como UUID en la ruta. **Eliminar un usuario elimina en cascada sus mascotas y todos sus registros.**",
+      "item": [
+        {
+          "name": "Crear usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Usuario creado con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('Campo nombre guardado', () => pm.expect(data.nombre).to.eql(\"Usuario de Prueba PetCare\"));",
+                  "pm.test('Campo telefono guardado', () => pm.expect(data.telefono).to.eql(\"3000000000\"));",
+                  "pm.test('Campo rol guardado', () => pm.expect(data.rol).to.eql(\"DUENO\"));",
+                  "pm.test('Campo estado guardado', () => pm.expect(data.estado).to.eql(true));",
+                  "",
+                  "",
+                  "pm.test('La respuesta no incluye la contraseña', () => pm.expect(data).to.not.have.property('password'));",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('usuarioId', data.id);",
+                  "  console.log('usuarioId = ' + data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Usuario de Prueba PetCare\",\n  \"email\": \"usuario.prueba.{{$timestamp}}@example.com\",\n  \"password\": \"{{usuarioPassword}}\",\n  \"telefono\": \"3000000000\",\n  \"rol\": \"DUENO\",\n  \"estado\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ]
+            },
+            "description": "Crea un registro de prueba y guarda su id en la variable `usuarioId`."
+          }
+        },
+        {
+          "name": "Listar usuarios",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "const id = pm.collectionVariables.get('usuarioId');",
+                  "if (id) {",
+                  "  pm.test('Incluye el registro de prueba', () => {",
+                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "  });",
+                  "}",
+                  "",
+                  "pm.test('Ningún usuario incluye contraseña', () => {",
+                  "  body.forEach((u) => pm.expect(u).to.not.have.property('password'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ]
+            },
+            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+          }
+        },
+        {
+          "name": "Obtener usuario por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('usuarioId');",
+                  "pm.test('usuarioId está definido (ejecute antes \"Crear usuario\")', () => {",
+                  "  pm.expect(id, 'usuarioId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Usuario encontrado');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));",
+                  "",
+                  "pm.test('Incluye sus mascotas y no la contraseña', () => {",
+                  "  pm.expect(data).to.not.have.property('password');",
+                  "  pm.expect(data.mascotas).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            },
+            "description": "Obtiene el registro `usuarioId`. Respuesta: `{ message, data }`; 404 si no existe."
+          }
+        },
+        {
+          "name": "Actualizar usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('usuarioId');",
+                  "pm.test('usuarioId está definido (ejecute antes \"Crear usuario\")', () => {",
+                  "  pm.expect(id, 'usuarioId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Usuario actualizado con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
+                  "pm.test('Campo telefono guardado', () => pm.expect(data.telefono).to.eql(\"3001112233\"));",
+                  "pm.test('Campo rol guardado', () => pm.expect(data.rol).to.eql(\"VETERINARIO\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"telefono\": \"3001112233\",\n  \"rol\": \"VETERINARIO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            },
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+          }
+        },
+        {
+          "name": "Eliminar usuario (manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
+                  "    pm.execution.skipRequest();",
+                  "  } else {",
+                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "  }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Usuario eliminado con éxito'));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('usuarioId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            },
+            "description": "Elimina el registro de prueba `usuarioId`. **Solo se envía si la variable `permitirEliminacion` es `true`.** Atención: elimina en cascada los registros asociados."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mascotas",
+      "description": "Mascotas asociadas a un usuario existente (usuarioId). Especies: PERRO, GATO, AVE, OTRO. En este módulo el :id no se valida como UUID en la ruta. **Eliminar una mascota elimina en cascada sus citas, historias clínicas, alimentación, vacunas y medicamentos.**",
+      "item": [
+        {
+          "name": "Crear mascota",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('usuarioId')) {",
+                  "  console.warn('usuarioId está vacío: cree primero el registro del que depende.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Mascota creada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('Campo nombre guardado', () => pm.expect(data.nombre).to.eql(\"Mascota de Prueba\"));",
+                  "pm.test('Campo especie guardado', () => pm.expect(data.especie).to.eql(\"PERRO\"));",
+                  "pm.test('Campo peso guardado', () => pm.expect(data.peso).to.eql(12.5));",
+                  "",
+                  "",
+                  "pm.test('Asociada al usuario de prueba', () => pm.expect(data.usuarioId).to.eql(pm.collectionVariables.get('usuarioId')));",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('mascotaId', data.id);",
+                  "  console.log('mascotaId = ' + data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": \"{{usuarioId}}\",\n  \"nombre\": \"Mascota de Prueba\",\n  \"especie\": \"PERRO\",\n  \"raza\": \"Criollo\",\n  \"fecha_nacimiento\": \"2022-03-15\",\n  \"peso\": 12.5,\n  \"fotoUrl\": \"https://example.com/foto-mascota-prueba.jpg\",\n  \"estado\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mascotas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas"
+              ]
+            },
+            "description": "Crea un registro de prueba y guarda su id en la variable `mascotaId`. Requiere `usuarioId`."
+          }
+        },
+        {
+          "name": "Listar mascotas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "const id = pm.collectionVariables.get('mascotaId');",
+                  "if (id) {",
+                  "  pm.test('Incluye el registro de prueba', () => {",
+                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mascotas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas"
+              ]
+            },
+            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+          }
+        },
+        {
+          "name": "Obtener mascota por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('mascotaId');",
+                  "pm.test('mascotaId está definido (ejecute antes \"Crear mascota\")', () => {",
+                  "  pm.expect(id, 'mascotaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Mascota encontrada');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));",
+                  "",
+                  "pm.test('Incluye el usuario dueño sin contraseña', () => {",
+                  "  pm.expect(data.usuario).to.be.an('object');",
+                  "  pm.expect(data.usuario).to.not.have.property('password');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mascotas/{{mascotaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas",
+                "{{mascotaId}}"
+              ]
+            },
+            "description": "Obtiene el registro `mascotaId`. Respuesta: `{ message, data }`; 404 si no existe."
+          }
+        },
+        {
+          "name": "Actualizar mascota",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('mascotaId');",
+                  "pm.test('mascotaId está definido (ejecute antes \"Crear mascota\")', () => {",
+                  "  pm.expect(id, 'mascotaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Mascota actualizada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
+                  "pm.test('Campo peso guardado', () => pm.expect(data.peso).to.eql(13.2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"peso\": 13.2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mascotas/{{mascotaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas",
+                "{{mascotaId}}"
+              ]
+            },
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+          }
+        },
+        {
+          "name": "Eliminar mascota (manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
+                  "    pm.execution.skipRequest();",
+                  "  } else {",
+                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "  }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Mascota eliminada con éxito'));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('mascotaId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mascotas/{{mascotaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas",
+                "{{mascotaId}}"
+              ]
+            },
+            "description": "Elimina el registro de prueba `mascotaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.** Atención: elimina en cascada los registros asociados."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Citas",
+      "description": "Citas veterinarias de una mascota. Estados: PROGRAMADA (por defecto), REALIZADA, CANCELADA, REPROGRAMADA. El :id se valida como UUID (400 si está mal formado).",
+      "item": [
+        {
+          "name": "Crear cita",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('mascotaId')) {",
+                  "  console.warn('mascotaId está vacío: cree primero el registro del que depende.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Cita creada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('Campo motivo guardado', () => pm.expect(data.motivo).to.eql(\"Control anual (registro de prueba)\"));",
+                  "pm.test('Campo lugarveterinaria guardado', () => pm.expect(data.lugarveterinaria).to.eql(\"Clínica Veterinaria de Prueba\"));",
+                  "pm.test('Campo estado guardado', () => pm.expect(data.estado).to.eql(\"PROGRAMADA\"));",
+                  "pm.test('Asociado a la mascota de prueba', () => pm.expect(data.mascotaId).to.eql(pm.collectionVariables.get('mascotaId')));",
+                  "",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('citaId', data.id);",
+                  "  console.log('citaId = ' + data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mascotaId\": \"{{mascotaId}}\",\n  \"fechaHora\": \"2026-12-01T10:00:00.000Z\",\n  \"motivo\": \"Control anual (registro de prueba)\",\n  \"lugarveterinaria\": \"Clínica Veterinaria de Prueba\",\n  \"estado\": \"PROGRAMADA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            },
+            "description": "Crea un registro de prueba y guarda su id en la variable `citaId`. Requiere `mascotaId`."
+          }
+        },
+        {
+          "name": "Listar citas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "const id = pm.collectionVariables.get('citaId');",
+                  "if (id) {",
+                  "  pm.test('Incluye el registro de prueba', () => {",
+                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas"
+              ]
+            },
+            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+          }
+        },
+        {
+          "name": "Obtener cita por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('citaId');",
+                  "pm.test('citaId está definido (ejecute antes \"Crear cita\")', () => {",
+                  "  pm.expect(id, 'citaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Cita encontrada');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{citaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{citaId}}"
+              ]
+            },
+            "description": "Obtiene el registro `citaId`. Respuesta: `{ message, data }`; 404 si no existe."
+          }
+        },
+        {
+          "name": "Actualizar cita",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('citaId');",
+                  "pm.test('citaId está definido (ejecute antes \"Crear cita\")', () => {",
+                  "  pm.expect(id, 'citaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Cita actualizada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
+                  "pm.test('Campo estado guardado', () => pm.expect(data.estado).to.eql(\"REALIZADA\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"REALIZADA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{citaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{citaId}}"
+              ]
+            },
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+          }
+        },
+        {
+          "name": "Eliminar cita (manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
+                  "    pm.execution.skipRequest();",
+                  "  } else {",
+                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "  }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Cita eliminada con éxito'));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('citaId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/citas/{{citaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "citas",
+                "{{citaId}}"
+              ]
+            },
+            "description": "Elimina el registro de prueba `citaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Historias Clínicas",
+      "description": "Historias clínicas (consultas) de una mascota. El :id se valida como UUID (400 si está mal formado).",
+      "item": [
+        {
+          "name": "Crear historia clínica",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('mascotaId')) {",
+                  "  console.warn('mascotaId está vacío: cree primero el registro del que depende.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Historia clínica creada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('Campo diagnostico guardado', () => pm.expect(data.diagnostico).to.eql(\"Control general sin hallazgos (registro de prueba)\"));",
+                  "pm.test('Campo pesoRegistrado guardado', () => pm.expect(data.pesoRegistrado).to.eql(12.4));",
+                  "pm.test('Campo veterinarioResponsable guardado', () => pm.expect(data.veterinarioResponsable).to.eql(\"Veterinario de Prueba\"));",
+                  "pm.test('Asociado a la mascota de prueba', () => pm.expect(data.mascotaId).to.eql(pm.collectionVariables.get('mascotaId')));",
+                  "",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('historiaClinicaId', data.id);",
+                  "  console.log('historiaClinicaId = ' + data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mascotaId\": \"{{mascotaId}}\",\n  \"fechaConsulta\": \"2026-11-18T10:00:00.000Z\",\n  \"diagnostico\": \"Control general sin hallazgos (registro de prueba)\",\n  \"observaciones\": \"Registro de prueba\",\n  \"pesoRegistrado\": 12.4,\n  \"veterinarioResponsable\": \"Veterinario de Prueba\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/historias-clinicas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "historias-clinicas"
+              ]
+            },
+            "description": "Crea un registro de prueba y guarda su id en la variable `historiaClinicaId`. Requiere `mascotaId`."
+          }
+        },
+        {
+          "name": "Listar historias clínicas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "const id = pm.collectionVariables.get('historiaClinicaId');",
+                  "if (id) {",
+                  "  pm.test('Incluye el registro de prueba', () => {",
+                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/historias-clinicas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "historias-clinicas"
+              ]
+            },
+            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+          }
+        },
+        {
+          "name": "Obtener historia clínica por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('historiaClinicaId');",
+                  "pm.test('historiaClinicaId está definido (ejecute antes \"Crear historia clínica\")', () => {",
+                  "  pm.expect(id, 'historiaClinicaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Historia clínica encontrada');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/historias-clinicas/{{historiaClinicaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "historias-clinicas",
+                "{{historiaClinicaId}}"
+              ]
+            },
+            "description": "Obtiene el registro `historiaClinicaId`. Respuesta: `{ message, data }`; 404 si no existe."
+          }
+        },
+        {
+          "name": "Actualizar historia clínica",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('historiaClinicaId');",
+                  "pm.test('historiaClinicaId está definido (ejecute antes \"Crear historia clínica\")', () => {",
+                  "  pm.expect(id, 'historiaClinicaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Historia clínica actualizada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
+                  "pm.test('Campo diagnostico guardado', () => pm.expect(data.diagnostico).to.eql(\"Control general, seguimiento en 6 meses\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnostico\": \"Control general, seguimiento en 6 meses\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/historias-clinicas/{{historiaClinicaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "historias-clinicas",
+                "{{historiaClinicaId}}"
+              ]
+            },
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+          }
+        },
+        {
+          "name": "Eliminar historia clínica (manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
+                  "    pm.execution.skipRequest();",
+                  "  } else {",
+                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "  }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Historia clínica eliminada con éxito'));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('historiaClinicaId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/historias-clinicas/{{historiaClinicaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "historias-clinicas",
+                "{{historiaClinicaId}}"
+              ]
+            },
+            "description": "Elimina el registro de prueba `historiaClinicaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alimentación",
+      "description": "Planes de alimentación de una mascota. Ruta: /alimentaciones. El :id se valida como UUID (400 si está mal formado).",
+      "item": [
+        {
+          "name": "Crear alimentación",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('mascotaId')) {",
+                  "  console.warn('mascotaId está vacío: cree primero el registro del que depende.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Alimentación creada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('Campo tipoAlimento guardado', () => pm.expect(data.tipoAlimento).to.eql(\"Concentrado\"));",
+                  "pm.test('Campo cantidad guardado', () => pm.expect(data.cantidad).to.eql(250));",
+                  "pm.test('Campo unidad guardado', () => pm.expect(data.unidad).to.eql(\"gramos\"));",
+                  "pm.test('Asociado a la mascota de prueba', () => pm.expect(data.mascotaId).to.eql(pm.collectionVariables.get('mascotaId')));",
+                  "",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('alimentacionId', data.id);",
+                  "  console.log('alimentacionId = ' + data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mascotaId\": \"{{mascotaId}}\",\n  \"tipoAlimento\": \"Concentrado\",\n  \"marca\": \"Marca de Prueba\",\n  \"cantidad\": 250,\n  \"unidad\": \"gramos\",\n  \"frecuencia\": \"2 veces al día\",\n  \"horario\": \"08:00 y 18:00\",\n  \"observaciones\": \"Registro de prueba\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/alimentaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alimentaciones"
+              ]
+            },
+            "description": "Crea un registro de prueba y guarda su id en la variable `alimentacionId`. Requiere `mascotaId`."
+          }
+        },
+        {
+          "name": "Listar alimentación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "const id = pm.collectionVariables.get('alimentacionId');",
+                  "if (id) {",
+                  "  pm.test('Incluye el registro de prueba', () => {",
+                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/alimentaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alimentaciones"
+              ]
+            },
+            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+          }
+        },
+        {
+          "name": "Obtener alimentación por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('alimentacionId');",
+                  "pm.test('alimentacionId está definido (ejecute antes \"Crear alimentación\")', () => {",
+                  "  pm.expect(id, 'alimentacionId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Alimentación encontrada');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/alimentaciones/{{alimentacionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alimentaciones",
+                "{{alimentacionId}}"
+              ]
+            },
+            "description": "Obtiene el registro `alimentacionId`. Respuesta: `{ message, data }`; 404 si no existe."
+          }
+        },
+        {
+          "name": "Actualizar alimentación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('alimentacionId');",
+                  "pm.test('alimentacionId está definido (ejecute antes \"Crear alimentación\")', () => {",
+                  "  pm.expect(id, 'alimentacionId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Alimentación actualizada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
+                  "pm.test('Campo cantidad guardado', () => pm.expect(data.cantidad).to.eql(300));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cantidad\": 300\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/alimentaciones/{{alimentacionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alimentaciones",
+                "{{alimentacionId}}"
+              ]
+            },
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+          }
+        },
+        {
+          "name": "Eliminar alimentación (manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
+                  "    pm.execution.skipRequest();",
+                  "  } else {",
+                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "  }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Alimentación eliminada con éxito'));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('alimentacionId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/alimentaciones/{{alimentacionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alimentaciones",
+                "{{alimentacionId}}"
+              ]
+            },
+            "description": "Elimina el registro de prueba `alimentacionId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vacunas",
+      "description": "Vacunas aplicadas a una mascota. **La mascota se indica con `mascota_id` (guion bajo).** Fechas en formato YYYY-MM-DD. El :id se valida como UUID (400 si está mal formado).",
+      "item": [
+        {
+          "name": "Crear vacuna",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('mascotaId')) {",
+                  "  console.warn('mascotaId está vacío: cree primero el registro del que depende.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Vacuna registrada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('Campo nombreVacuna guardado', () => pm.expect(data.nombreVacuna).to.eql(\"Rabia (registro de prueba)\"));",
+                  "pm.test('Campo loteVacuna guardado', () => pm.expect(data.loteVacuna).to.eql(\"LOTE-PRUEBA-001\"));",
+                  "pm.test('Asociado a la mascota de prueba', () => pm.expect(data.mascota_id).to.eql(pm.collectionVariables.get('mascotaId')));",
+                  "",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('vacunaId', data.id);",
+                  "  console.log('vacunaId = ' + data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mascota_id\": \"{{mascotaId}}\",\n  \"nombreVacuna\": \"Rabia (registro de prueba)\",\n  \"fechaAplicacion\": \"2026-01-10\",\n  \"loteVacuna\": \"LOTE-PRUEBA-001\",\n  \"observaciones\": \"Registro de prueba\",\n  \"proximaDosis\": \"2027-01-10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vacunas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vacunas"
+              ]
+            },
+            "description": "Crea un registro de prueba y guarda su id en la variable `vacunaId`. Requiere `mascotaId`."
+          }
+        },
+        {
+          "name": "Listar vacunas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "const id = pm.collectionVariables.get('vacunaId');",
+                  "if (id) {",
+                  "  pm.test('Incluye el registro de prueba', () => {",
+                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vacunas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vacunas"
+              ]
+            },
+            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+          }
+        },
+        {
+          "name": "Obtener vacuna por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('vacunaId');",
+                  "pm.test('vacunaId está definido (ejecute antes \"Crear vacuna\")', () => {",
+                  "  pm.expect(id, 'vacunaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Vacuna encontrada');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));",
+                  "",
+                  "pm.test('Fechas guardadas sin cambio de día', () => {",
+                  "  pm.expect(data.fechaAplicacion).to.eql('2026-01-10');",
+                  "  pm.expect(data.proximaDosis).to.eql('2027-01-10');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vacunas/{{vacunaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vacunas",
+                "{{vacunaId}}"
+              ]
+            },
+            "description": "Obtiene el registro `vacunaId`. Respuesta: `{ message, data }`; 404 si no existe."
+          }
+        },
+        {
+          "name": "Actualizar vacuna",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('vacunaId');",
+                  "pm.test('vacunaId está definido (ejecute antes \"Crear vacuna\")', () => {",
+                  "  pm.expect(id, 'vacunaId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Vacuna actualizada con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
+                  "pm.test('Campo loteVacuna guardado', () => pm.expect(data.loteVacuna).to.eql(\"LOTE-PRUEBA-002\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loteVacuna\": \"LOTE-PRUEBA-002\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vacunas/{{vacunaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vacunas",
+                "{{vacunaId}}"
+              ]
+            },
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+          }
+        },
+        {
+          "name": "Eliminar vacuna (manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
+                  "    pm.execution.skipRequest();",
+                  "  } else {",
+                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "  }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Vacuna eliminada con éxito'));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('vacunaId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vacunas/{{vacunaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vacunas",
+                "{{vacunaId}}"
+              ]
+            },
+            "description": "Elimina el registro de prueba `vacunaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Medicamentos",
+      "description": "Tratamientos con medicamentos de una mascota. Fechas `inicio` y `fin` en formato YYYY-MM-DD; `estado` es booleano (por defecto true). El :id se valida como UUID (400 si está mal formado).",
+      "item": [
+        {
+          "name": "Crear medicamento",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('mascotaId')) {",
+                  "  console.warn('mascotaId está vacío: cree primero el registro del que depende.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Medicamento creado con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('Campo nombreMedicamento guardado', () => pm.expect(data.nombreMedicamento).to.eql(\"Medicamento de Prueba\"));",
+                  "pm.test('Campo dosis guardado', () => pm.expect(data.dosis).to.eql(\"250 mg\"));",
+                  "pm.test('Campo estado guardado', () => pm.expect(data.estado).to.eql(true));",
+                  "pm.test('Asociado a la mascota de prueba', () => pm.expect(data.mascotaId).to.eql(pm.collectionVariables.get('mascotaId')));",
+                  "",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('medicamentoId', data.id);",
+                  "  console.log('medicamentoId = ' + data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mascotaId\": \"{{mascotaId}}\",\n  \"nombreMedicamento\": \"Medicamento de Prueba\",\n  \"dosis\": \"250 mg\",\n  \"frecuencia\": \"Cada 12 horas\",\n  \"inicio\": \"2026-06-10\",\n  \"fin\": \"2026-06-17\",\n  \"observaciones\": \"Registro de prueba\",\n  \"estado\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/medicamentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "medicamentos"
+              ]
+            },
+            "description": "Crea un registro de prueba y guarda su id en la variable `medicamentoId`. Requiere `mascotaId`."
+          }
+        },
+        {
+          "name": "Listar medicamentos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "const id = pm.collectionVariables.get('medicamentoId');",
+                  "if (id) {",
+                  "  pm.test('Incluye el registro de prueba', () => {",
+                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/medicamentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "medicamentos"
+              ]
+            },
+            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+          }
+        },
+        {
+          "name": "Obtener medicamento por ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('medicamentoId');",
+                  "pm.test('medicamentoId está definido (ejecute antes \"Crear medicamento\")', () => {",
+                  "  pm.expect(id, 'medicamentoId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Medicamento encontrado');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));",
+                  "",
+                  "pm.test('Fechas guardadas sin cambio de día', () => {",
+                  "  pm.expect(data.inicio).to.eql('2026-06-10');",
+                  "  pm.expect(data.fin).to.eql('2026-06-17');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/medicamentos/{{medicamentoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "medicamentos",
+                "{{medicamentoId}}"
+              ]
+            },
+            "description": "Obtiene el registro `medicamentoId`. Respuesta: `{ message, data }`; 404 si no existe."
+          }
+        },
+        {
+          "name": "Actualizar medicamento",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const id = pm.collectionVariables.get('medicamentoId');",
+                  "pm.test('medicamentoId está definido (ejecute antes \"Crear medicamento\")', () => {",
+                  "  pm.expect(id, 'medicamentoId vacío').to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Medicamento actualizado con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
+                  "pm.test('Campo estado guardado', () => pm.expect(data.estado).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/medicamentos/{{medicamentoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "medicamentos",
+                "{{medicamentoId}}"
+              ]
+            },
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+          }
+        },
+        {
+          "name": "Eliminar medicamento (manual)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
+                  "    pm.execution.skipRequest();",
+                  "  } else {",
+                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "  }",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Medicamento eliminado con éxito'));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('medicamentoId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/medicamentos/{{medicamentoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "medicamentos",
+                "{{medicamentoId}}"
+              ]
+            },
+            "description": "Elimina el registro de prueba `medicamentoId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "usuarioPassword",
+      "value": "CambiarEsta123",
+      "type": "string"
+    },
+    {
+      "key": "usuarioId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mascotaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "citaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "historiaClinicaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "alimentacionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "vacunaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "medicamentoId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "permitirEliminacion",
+      "value": "false",
+      "type": "string"
+    }
+  ]
+}
