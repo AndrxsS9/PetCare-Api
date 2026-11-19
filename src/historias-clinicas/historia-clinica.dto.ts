@@ -3,8 +3,10 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateHistoriaClinicaDto {
@@ -25,11 +27,12 @@ export class CreateHistoriaClinicaDto {
   observaciones?: string;
 
   @IsNumber()
-  @IsNotEmpty()
+  @IsPositive()
   pesoRegistrado: number;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(150)
   veterinarioResponsable: string;
 }
 
@@ -39,6 +42,7 @@ export class UpdateHistoriaClinicaDto {
   fechaConsulta?: string;
 
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   diagnostico?: string;
 
@@ -47,10 +51,13 @@ export class UpdateHistoriaClinicaDto {
   observaciones?: string;
 
   @IsNumber()
+  @IsPositive()
   @IsOptional()
   pesoRegistrado?: number;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
   @IsOptional()
   veterinarioResponsable?: string;
 }
