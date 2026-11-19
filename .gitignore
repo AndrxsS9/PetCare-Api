@@ -42,6 +42,10 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# Private end-to-end test configuration (see .env.e2e.example)
+.env.e2e
+.env.e2e.local
+
 # temp directory
 .temp
 .tmp
