@@ -4,6 +4,8 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
+  MaxLength,
 } from 'class-validator';
 
 export enum EstadoCita {
@@ -14,7 +16,7 @@ export enum EstadoCita {
 }
 
 export class CreateCitaDto {
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   mascotaId: string;
 
@@ -24,10 +26,12 @@ export class CreateCitaDto {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   motivo: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(255)
   lugarveterinaria: string;
 
   @IsEnum(EstadoCita)
@@ -41,10 +45,14 @@ export class UpdateCitaDto {
   fechaHora?: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   @IsOptional()
   motivo?: string;
 
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
   @IsOptional()
   lugarveterinaria?: string;
 
