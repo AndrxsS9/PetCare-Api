@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+} from '@nestjs/common';
 import {
   CreateHistoriaClinicaDto,
   UpdateHistoriaClinicaDto,
@@ -15,7 +24,7 @@ export class HistoriasClinicasController {
   }
 
   @Get(':id')
-  getHistoriaClinicaById(@Param('id') id: string) {
+  getHistoriaClinicaById(@Param('id', ParseUUIDPipe) id: string) {
     return this.historiasClinicasService.findById(id);
   }
 
@@ -28,14 +37,14 @@ export class HistoriasClinicasController {
 
   @Put(':id')
   updateHistoriaClinica(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() historiaChanges: UpdateHistoriaClinicaDto,
   ) {
     return this.historiasClinicasService.update(id, historiaChanges);
   }
 
   @Delete(':id')
-  deleteHistoriaClinica(@Param('id') id: string) {
+  deleteHistoriaClinica(@Param('id', ParseUUIDPipe) id: string) {
     return this.historiasClinicasService.delete(id);
   }
 }

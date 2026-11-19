@@ -46,7 +46,7 @@ export class CitaEntity {
   })
   estado: EstadoCita;
 
-  @ManyToOne('MascotaEntity', 'citas', { onDelete: 'CASCADE' })
+  @ManyToOne('MascotaEntity', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mascotaId' })
-  mascota: any;
+  mascota: MascotaEntity;
 }

@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+} from '@nestjs/common';
 import {
   CreateAlimentacionDto,
   UpdateAlimentacionDto,
@@ -15,7 +24,7 @@ export class AlimentacionController {
   }
 
   @Get(':id')
-  getAlimentacionById(@Param('id') id: string) {
+  getAlimentacionById(@Param('id', ParseUUIDPipe) id: string) {
     return this.alimentacionesService.findById(id);
   }
 
@@ -26,14 +35,14 @@ export class AlimentacionController {
 
   @Put(':id')
   updateAlimentacion(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() alimentacionChanges: UpdateAlimentacionDto,
   ) {
     return this.alimentacionesService.update(id, alimentacionChanges);
   }
 
   @Delete(':id')
-  deleteAlimentacion(@Param('id') id: string) {
+  deleteAlimentacion(@Param('id', ParseUUIDPipe) id: string) {
     return this.alimentacionesService.delete(id);
   }
 }

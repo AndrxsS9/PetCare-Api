@@ -49,7 +49,7 @@ export class HistoriaClinicaEntity {
   })
   veterinarioResponsable: string;
 
-  @ManyToOne('MascotaEntity', 'historiasClinicas', { onDelete: 'CASCADE' })
+  @ManyToOne('MascotaEntity', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'mascotaId' })
-  mascota: any;
+  mascota: MascotaEntity;
 }

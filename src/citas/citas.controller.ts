@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+} from '@nestjs/common';
 import { CreateCitaDto, UpdateCitaDto } from './cita.dto.js';
 import { CitasService } from './citas.service.js';
 
@@ -12,7 +21,7 @@ export class CitasController {
   }
 
   @Get(':id')
-  getCitaById(@Param('id') id: string) {
+  getCitaById(@Param('id', ParseUUIDPipe) id: string) {
     return this.citasService.findById(id);
   }
 
@@ -22,12 +31,15 @@ export class CitasController {
   }
 
   @Put(':id')
-  updateCita(@Param('id') id: string, @Body() citaChanges: UpdateCitaDto) {
+  updateCita(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() citaChanges: UpdateCitaDto,
+  ) {
     return this.citasService.update(id, citaChanges);
   }
 
   @Delete(':id')
-  deleteCita(@Param('id') id: string) {
+  deleteCita(@Param('id', ParseUUIDPipe) id: string) {
     return this.citasService.delete(id);
   }
 }
