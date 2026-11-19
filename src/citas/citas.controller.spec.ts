@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { CitasController } from './citas.controller.js';
@@ -162,6 +166,71 @@ describe('CitasController (route validation)', () => {
         .expect(400);
 
       expect(mockService.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('404 handling for nonexistent resources', () => {
+    const citaNotFound = `Cita con ID ${citaId} no encontrada`;
+    const notFoundBody = (message: string) => ({
+      statusCode: 404,
+      message,
+      error: 'Not Found',
+    });
+
+    it('GET /citas/:id returns 404 when the appointment does not exist', async () => {
+      mockService.findById.mockRejectedValue(
+        new NotFoundException(citaNotFound),
+      );
+
+      const res = await request(app.getHttpServer())
+        .get(`/citas/${citaId}`)
+        .expect(404);
+
+      expect(mockService.findById).toHaveBeenCalledWith(citaId);
+      expect(res.body).toEqual(notFoundBody(citaNotFound));
+    });
+
+    it('PUT /citas/:id returns 404 when the appointment does not exist', async () => {
+      mockService.update.mockRejectedValue(new NotFoundException(citaNotFound));
+
+      const res = await request(app.getHttpServer())
+        .put(`/citas/${citaId}`)
+        .send({ motivo: 'Revisión' })
+        .expect(404);
+
+      expect(mockService.update).toHaveBeenCalledWith(
+        citaId,
+        expect.objectContaining({ motivo: 'Revisión' }),
+      );
+      expect(res.body).toEqual(notFoundBody(citaNotFound));
+    });
+
+    it('DELETE /citas/:id returns 404 when the appointment does not exist', async () => {
+      mockService.delete.mockRejectedValue(new NotFoundException(citaNotFound));
+
+      const res = await request(app.getHttpServer())
+        .delete(`/citas/${citaId}`)
+        .expect(404);
+
+      expect(mockService.delete).toHaveBeenCalledWith(citaId);
+      expect(res.body).toEqual(notFoundBody(citaNotFound));
+    });
+
+    it('POST /citas returns 404 when the associated pet does not exist', async () => {
+      const mascotaNotFound = `Mascota con ID ${mascotaId} no encontrada`;
+      mockService.create.mockRejectedValue(
+        new NotFoundException(mascotaNotFound),
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/citas')
+        .send(validPayload)
+        .expect(404);
+
+      expect(mockService.create).toHaveBeenCalledWith(
+        expect.objectContaining(validPayload),
+      );
+      expect(res.body).toEqual(notFoundBody(mascotaNotFound));
     });
   });
 });
