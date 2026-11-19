@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,8 @@ import { Repository } from 'typeorm';
 import { MascotaEntity } from './mascota.entity.js';
 import { UsuarioEntity } from '../usuarios/usuario.entity.js';
 import { CreateMascotaDto, UpdateMascotaDto } from './mascota.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { isAdmin, petOwnershipWhere } from '../auth/ownership.js';
 
 @Injectable()
 export class MascotasService {
@@ -25,8 +28,9 @@ export class MascotasService {
     return mascota;
   }
 
-  async findAll(): Promise<MascotaEntity[]> {
+  async findAll(user: AuthenticatedUser): Promise<MascotaEntity[]> {
     const mascotas = await this.mascotaRepository.find({
+      where: petOwnershipWhere(user),
       relations: {
         usuario: true,
       },
@@ -35,9 +39,13 @@ export class MascotasService {
     return mascotas.map((m) => this.sanitizeMascota(m));
   }
 
-  async findById(id: string): Promise<{ message: string; data: MascotaEntity }> {
+  async findById(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<{ message: string; data: MascotaEntity }> {
+    // Foreign pets are filtered by the query itself and reported as 404.
     const mascota = await this.mascotaRepository.findOne({
-      where: { id },
+      where: { id, ...petOwnershipWhere(user) },
       relations: {
         usuario: true,
       },
@@ -55,19 +63,29 @@ export class MascotasService {
 
   async create(
     mascotaPayload: CreateMascotaDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: MascotaEntity }> {
+    // Regular users always own the pets they register; only ADMIN may choose
+    // another owner. The body's usuarioId is never proof of authorization.
+    const ownerId = mascotaPayload.usuarioId ?? user.id;
+
+    if (!isAdmin(user) && ownerId !== user.id) {
+      throw new ForbiddenException('Solo puedes registrar mascotas a tu nombre');
+    }
+
     const usuario = await this.usuarioRepository.findOne({
-      where: { id: mascotaPayload.usuarioId },
+      where: { id: ownerId },
     });
 
     if (!usuario) {
       throw new NotFoundException(
-        `El usuario con ID ${mascotaPayload.usuarioId} no existe. No se puede asociar una mascota a un usuario inexistente`,
+        `El usuario con ID ${ownerId} no existe. No se puede asociar una mascota a un usuario inexistente`,
       );
     }
 
     const newMascota = this.mascotaRepository.create({
       ...mascotaPayload,
+      usuarioId: ownerId,
       fotoUrl: mascotaPayload.fotoUrl ?? '',
       estado: mascotaPayload.estado ?? true,
       usuario,
@@ -84,9 +102,11 @@ export class MascotasService {
   async update(
     id: string,
     mascotaChanges: UpdateMascotaDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: MascotaEntity }> {
+    // Ownership is verified by the lookup itself, before any field changes.
     const mascota = await this.mascotaRepository.findOne({
-      where: { id },
+      where: { id, ...petOwnershipWhere(user) },
       relations: {
         usuario: true,
       },
@@ -97,6 +117,12 @@ export class MascotasService {
     }
 
     if (mascotaChanges.usuarioId && mascotaChanges.usuarioId !== mascota.usuarioId) {
+      if (!isAdmin(user)) {
+        throw new ForbiddenException(
+          'Solo un administrador puede transferir la propiedad de una mascota',
+        );
+      }
+
       const usuario = await this.usuarioRepository.findOne({
         where: { id: mascotaChanges.usuarioId },
       });
@@ -129,8 +155,11 @@ export class MascotasService {
     };
   }
 
-  async delete(id: string): Promise<{ message: string }> {
-    const mascota = await this.mascotaRepository.findOne({ where: { id } });
+  async delete(id: string, user: AuthenticatedUser): Promise<{ message: string }> {
+    // Related records are removed by the ON DELETE CASCADE foreign keys.
+    const mascota = await this.mascotaRepository.findOne({
+      where: { id, ...petOwnershipWhere(user) },
+    });
 
     if (!mascota) {
       throw new NotFoundException(`Mascota con ID ${id} no encontrada`);

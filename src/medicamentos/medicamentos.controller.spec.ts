@@ -11,6 +11,21 @@ import {
   CreateMedicamentoDto,
   UpdateMedicamentoDto,
 } from './medicamento.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
+};
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching the other newer specs.
@@ -62,6 +77,11 @@ describe('MedicamentosController (HTTP)', () => {
     }).compile();
 
     app = module.createNestApplication();
+    // Stands in for the global JwtAuthGuard, which sets request.user.
+    app.use((req: { user?: AuthenticatedUser }, _res: unknown, next: () => void) => {
+      req.user = adminUser;
+      next();
+    });
     // Same options as the global pipe registered in main.ts.
     app.useGlobalPipes(
       new ValidationPipe({
@@ -84,7 +104,7 @@ describe('MedicamentosController (HTTP)', () => {
       const res = await request(app.getHttpServer()).get(baseUrl).expect(200);
 
       expect(mockService.findAll).toHaveBeenCalledTimes(1);
-      expect(mockService.findAll).toHaveBeenCalledWith();
+      expect(mockService.findAll).toHaveBeenCalledWith(adminUser);
       expect(res.body).toEqual([storedMedicamento]);
     });
 
@@ -108,7 +128,7 @@ describe('MedicamentosController (HTTP)', () => {
         .expect(200);
 
       expect(mockService.findById).toHaveBeenCalledTimes(1);
-      expect(mockService.findById).toHaveBeenCalledWith(medicamentoId);
+      expect(mockService.findById).toHaveBeenCalledWith(medicamentoId, adminUser);
       expect(res.body).toEqual(response);
     });
 
@@ -161,7 +181,7 @@ describe('MedicamentosController (HTTP)', () => {
         .expect(200);
 
       expect(mockService.delete).toHaveBeenCalledTimes(1);
-      expect(mockService.delete).toHaveBeenCalledWith(medicamentoId);
+      expect(mockService.delete).toHaveBeenCalledWith(medicamentoId, adminUser);
       expect(res.body).toEqual(response);
     });
   });
@@ -220,7 +240,7 @@ describe('MedicamentosController (HTTP)', () => {
         .get(`${baseUrl}/${medicamentoId}`)
         .expect(404);
 
-      expect(mockService.findById).toHaveBeenCalledWith(medicamentoId);
+      expect(mockService.findById).toHaveBeenCalledWith(medicamentoId, adminUser);
       expect(res.body).toEqual(notFoundBody(medicamentoNotFound));
     });
 
@@ -236,7 +256,7 @@ describe('MedicamentosController (HTTP)', () => {
 
       expect(mockService.update).toHaveBeenCalledWith(medicamentoId, {
         dosis: '500 mg',
-      });
+      }, adminUser);
       expect(res.body).toEqual(notFoundBody(medicamentoNotFound));
     });
 
@@ -249,7 +269,7 @@ describe('MedicamentosController (HTTP)', () => {
         .delete(`${baseUrl}/${medicamentoId}`)
         .expect(404);
 
-      expect(mockService.delete).toHaveBeenCalledWith(medicamentoId);
+      expect(mockService.delete).toHaveBeenCalledWith(medicamentoId, adminUser);
       expect(res.body).toEqual(notFoundBody(medicamentoNotFound));
     });
 
@@ -263,7 +283,7 @@ describe('MedicamentosController (HTTP)', () => {
         .send(validPayload)
         .expect(404);
 
-      expect(mockService.create).toHaveBeenCalledWith(validPayload);
+      expect(mockService.create).toHaveBeenCalledWith(validPayload, adminUser);
       expect(res.body).toEqual(notFoundBody(mascotaNotFound));
     });
   });
@@ -414,7 +434,7 @@ describe('MedicamentosController (HTTP)', () => {
         .send(payload)
         .expect(201);
 
-      expect(mockService.create).toHaveBeenCalledWith(payload);
+      expect(mockService.create).toHaveBeenCalledWith(payload, adminUser);
     });
 
     it('POST /medicamentos returns 201 when estado is omitted', async () => {
@@ -469,7 +489,7 @@ describe('MedicamentosController (HTTP)', () => {
 
       // The controller passes the ISO strings through untouched; conversion
       // to calendar dates happens in the service.
-      expect(mockService.create).toHaveBeenCalledWith(payload);
+      expect(mockService.create).toHaveBeenCalledWith(payload, adminUser);
     });
 
     it('PUT /medicamentos/:id forwards an explicit estado false', async () => {
@@ -536,7 +556,7 @@ describe('MedicamentosController (HTTP)', () => {
         .send({})
         .expect(200);
 
-      expect(mockService.update).toHaveBeenCalledWith(medicamentoId, {});
+      expect(mockService.update).toHaveBeenCalledWith(medicamentoId, {}, adminUser);
     });
   });
 });

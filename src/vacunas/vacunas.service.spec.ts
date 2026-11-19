@@ -5,6 +5,8 @@ import { VacunasService, toCalendarDate } from './vacunas.service.js';
 import { VacunaEntity } from './vacuna.entity.js';
 import { MascotaEntity } from '../mascotas/mascota.entity.js';
 import { CreateVacunaDto, UpdateVacunaDto } from './vacuna.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching the other newer specs.
@@ -26,6 +28,19 @@ const expectCalendarDay = (
   expect([date.getHours(), date.getMinutes(), date.getSeconds()]).toEqual([
     0, 0, 0,
   ]);
+};
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
 };
 
 describe('VacunasService', () => {
@@ -108,14 +123,14 @@ describe('VacunasService', () => {
       const vacunas = [buildVacuna()];
       mockVacunaRepo.find.mockResolvedValue(vacunas);
 
-      await expect(service.findAll()).resolves.toEqual(vacunas);
+      await expect(service.findAll(adminUser)).resolves.toEqual(vacunas);
       expect(mockVacunaRepo.find).toHaveBeenCalledTimes(1);
     });
 
     it('returns an empty list when there are no vaccinations', async () => {
       mockVacunaRepo.find.mockResolvedValue([]);
 
-      await expect(service.findAll()).resolves.toEqual([]);
+      await expect(service.findAll(adminUser)).resolves.toEqual([]);
     });
   });
 
@@ -124,7 +139,7 @@ describe('VacunasService', () => {
       const vacuna = buildVacuna();
       mockVacunaRepo.findOne.mockResolvedValue(vacuna);
 
-      await expect(service.findById(vacunaId)).resolves.toEqual({
+      await expect(service.findById(vacunaId, adminUser)).resolves.toEqual({
         message: 'Vacuna encontrada',
         data: vacuna,
       });
@@ -136,7 +151,7 @@ describe('VacunasService', () => {
     it('throws NotFoundException (HTTP 404) for a nonexistent vaccination', async () => {
       mockVacunaRepo.findOne.mockResolvedValue(null);
 
-      const error = await service.findById(vacunaId).catch((e: unknown) => e);
+      const error = await service.findById(vacunaId, adminUser).catch((e: unknown) => e);
 
       expect(error).toBeInstanceOf(NotFoundException);
       expect((error as NotFoundException).getStatus()).toBe(404);
@@ -159,7 +174,7 @@ describe('VacunasService', () => {
     it('creates a vaccination for an existing pet', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      const result = await service.create(payload);
+      const result = await service.create(payload, adminUser);
 
       expect(mockMascotaRepo.findOne).toHaveBeenCalledWith({
         where: { id: mascotaId },
@@ -186,7 +201,7 @@ describe('VacunasService', () => {
     it('converts ISO date strings into calendar Date values', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      await service.create(payload);
+      await service.create(payload, adminUser);
 
       const created = mockVacunaRepo.create.mock.calls[0][0];
       expectCalendarDay(created.fechaAplicacion, 2024, 2, 15);
@@ -197,7 +212,7 @@ describe('VacunasService', () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
       const { observaciones: _, ...withoutObservaciones } = payload;
 
-      const result = await service.create(withoutObservaciones);
+      const result = await service.create(withoutObservaciones, adminUser);
 
       expect(mockVacunaRepo.create.mock.calls[0][0].observaciones).toBe('');
       expect(result.data.observaciones).toBe('');
@@ -206,7 +221,7 @@ describe('VacunasService', () => {
     it('throws NotFoundException when the pet does not exist', async () => {
       mockMascotaRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.create(payload)).rejects.toThrow(
+      await expect(service.create(payload, adminUser)).rejects.toThrow(
         new NotFoundException(`Mascota con ID ${mascotaId} no encontrada`),
       );
       expect(mockVacunaRepo.create).not.toHaveBeenCalled();
@@ -223,7 +238,7 @@ describe('VacunasService', () => {
         loteVacuna: 'LOT-2024-099',
         // simulates an omitted field present as undefined on the DTO instance
         nombreVacuna: undefined,
-      });
+      }, adminUser);
 
       expect(mockVacunaRepo.findOne).toHaveBeenCalledWith({
         where: { id: vacunaId },
@@ -244,7 +259,7 @@ describe('VacunasService', () => {
       await service.update(vacunaId, {
         fechaAplicacion: '2024-03-05',
         proximaDosis: '2025-03-05T23:00:00-05:00',
-      });
+      }, adminUser);
 
       const changes = mockVacunaRepo.merge.mock.calls[0][1];
       expect(Object.keys(changes).sort()).toEqual([
@@ -258,7 +273,7 @@ describe('VacunasService', () => {
     it('allows clearing observaciones with an empty string', async () => {
       mockVacunaRepo.findOne.mockResolvedValue(buildVacuna());
 
-      const result = await service.update(vacunaId, { observaciones: '' });
+      const result = await service.update(vacunaId, { observaciones: '' }, adminUser);
 
       expect(mockVacunaRepo.merge.mock.calls[0][1]).toEqual({
         observaciones: '',
@@ -274,7 +289,7 @@ describe('VacunasService', () => {
         id: otherId,
         mascota_id: otherId,
         nombreVacuna: 'Moquillo',
-      } as UpdateVacunaDto);
+      } as UpdateVacunaDto, adminUser);
 
       expect(mockVacunaRepo.merge.mock.calls[0][1]).toEqual({
         nombreVacuna: 'Moquillo',
@@ -287,7 +302,7 @@ describe('VacunasService', () => {
       mockVacunaRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.update(vacunaId, { loteVacuna: 'LOT-X' }),
+        service.update(vacunaId, { loteVacuna: 'LOT-X' }, adminUser),
       ).rejects.toThrow(NotFoundException);
       expect(mockVacunaRepo.merge).not.toHaveBeenCalled();
       expect(mockVacunaRepo.save).not.toHaveBeenCalled();
@@ -298,7 +313,7 @@ describe('VacunasService', () => {
     it('deletes an existing vaccination', async () => {
       mockVacunaRepo.delete.mockResolvedValue({ affected: 1, raw: [] });
 
-      await expect(service.delete(vacunaId)).resolves.toEqual({
+      await expect(service.delete(vacunaId, adminUser)).resolves.toEqual({
         message: 'Vacuna eliminada con éxito',
       });
       expect(mockVacunaRepo.delete).toHaveBeenCalledWith(vacunaId);
@@ -307,7 +322,7 @@ describe('VacunasService', () => {
     it('throws NotFoundException for a nonexistent vaccination', async () => {
       mockVacunaRepo.delete.mockResolvedValue({ affected: 0, raw: [] });
 
-      await expect(service.delete(vacunaId)).rejects.toThrow(
+      await expect(service.delete(vacunaId, adminUser)).rejects.toThrow(
         NotFoundException,
       );
     });

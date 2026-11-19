@@ -5,6 +5,21 @@ import { HistoriasClinicasService } from './historias-clinicas.service.js';
 import { HistoriaClinicaEntity } from './historia-clinica.entity.js';
 import { MascotaEntity } from '../mascotas/mascota.entity.js';
 import { CreateHistoriaClinicaDto } from './historia-clinica.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
+};
 
 describe('HistoriasClinicasService', () => {
   let service: HistoriasClinicasService;
@@ -70,7 +85,7 @@ describe('HistoriasClinicasService', () => {
       const historias = [buildHistoria()];
       mockHistoriaRepo.find.mockResolvedValue(historias);
 
-      await expect(service.findAll()).resolves.toEqual(historias);
+      await expect(service.findAll(adminUser)).resolves.toEqual(historias);
       expect(mockHistoriaRepo.find).toHaveBeenCalledTimes(1);
     });
   });
@@ -80,7 +95,7 @@ describe('HistoriasClinicasService', () => {
       const historia = buildHistoria();
       mockHistoriaRepo.findOne.mockResolvedValue(historia);
 
-      const result = await service.findById(historiaId);
+      const result = await service.findById(historiaId, adminUser);
 
       expect(mockHistoriaRepo.findOne).toHaveBeenCalledWith({
         where: { id: historiaId },
@@ -94,7 +109,7 @@ describe('HistoriasClinicasService', () => {
     it('throws NotFoundException when the record does not exist', async () => {
       mockHistoriaRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('missing-id')).rejects.toThrow(
+      await expect(service.findById('missing-id', adminUser)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -112,7 +127,7 @@ describe('HistoriasClinicasService', () => {
     it('creates a record for an existing pet, converting the date and defaulting observaciones', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      const result = await service.create(payload);
+      const result = await service.create(payload, adminUser);
 
       expect(mockMascotaRepo.findOne).toHaveBeenCalledWith({
         where: { id: mascotaId },
@@ -134,7 +149,7 @@ describe('HistoriasClinicasService', () => {
     it('keeps provided observaciones', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      await service.create({ ...payload, observaciones: 'Revisar en 3 meses' });
+      await service.create({ ...payload, observaciones: 'Revisar en 3 meses' }, adminUser);
 
       expect(mockHistoriaRepo.create.mock.calls[0][0].observaciones).toBe(
         'Revisar en 3 meses',
@@ -144,7 +159,7 @@ describe('HistoriasClinicasService', () => {
     it('throws NotFoundException when the pet does not exist', async () => {
       mockMascotaRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.create(payload)).rejects.toThrow(NotFoundException);
+      await expect(service.create(payload, adminUser)).rejects.toThrow(NotFoundException);
       expect(mockHistoriaRepo.create).not.toHaveBeenCalled();
       expect(mockHistoriaRepo.save).not.toHaveBeenCalled();
     });
@@ -159,7 +174,7 @@ describe('HistoriasClinicasService', () => {
         diagnostico: 'Otitis leve',
         // simulates an omitted field present as undefined on the DTO instance
         observaciones: undefined,
-      });
+      }, adminUser);
 
       expect(mockHistoriaRepo.merge).toHaveBeenCalledWith(historia, {
         diagnostico: 'Otitis leve',
@@ -179,7 +194,7 @@ describe('HistoriasClinicasService', () => {
       const result = await service.update(historiaId, {
         fechaConsulta: '2026-02-01T08:30:00.000Z',
         pesoRegistrado: 29,
-      });
+      }, adminUser);
 
       expect(result.data.fechaConsulta).toBeInstanceOf(Date);
       expect(result.data.fechaConsulta.toISOString()).toBe(
@@ -192,7 +207,7 @@ describe('HistoriasClinicasService', () => {
       mockHistoriaRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.update('missing-id', { diagnostico: 'x' }),
+        service.update('missing-id', { diagnostico: 'x' }, adminUser),
       ).rejects.toThrow(NotFoundException);
       expect(mockHistoriaRepo.save).not.toHaveBeenCalled();
     });
@@ -202,7 +217,7 @@ describe('HistoriasClinicasService', () => {
     it('deletes an existing record', async () => {
       mockHistoriaRepo.delete.mockResolvedValue({ affected: 1, raw: [] });
 
-      await expect(service.delete(historiaId)).resolves.toEqual({
+      await expect(service.delete(historiaId, adminUser)).resolves.toEqual({
         message: 'Historia clínica eliminada con éxito',
       });
       expect(mockHistoriaRepo.delete).toHaveBeenCalledWith(historiaId);
@@ -211,7 +226,7 @@ describe('HistoriasClinicasService', () => {
     it('throws NotFoundException when nothing was deleted', async () => {
       mockHistoriaRepo.delete.mockResolvedValue({ affected: 0, raw: [] });
 
-      await expect(service.delete('missing-id')).rejects.toThrow(
+      await expect(service.delete('missing-id', adminUser)).rejects.toThrow(
         NotFoundException,
       );
     });

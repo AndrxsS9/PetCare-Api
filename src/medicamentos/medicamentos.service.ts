@@ -3,6 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MedicamentoEntity } from './medicamento.entity.js';
 import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import {
+  deletePetRecord,
+  findAccessibleMascota,
+  petRecordOwnershipWhere,
+} from '../auth/ownership.js';
 import {
   CreateMedicamentoDto,
   UpdateMedicamentoDto,
@@ -21,14 +27,21 @@ export class MedicamentosService {
     private readonly mascotaRepository: Repository<MascotaEntity>,
   ) {}
 
-  async findAll(): Promise<MedicamentoEntity[]> {
-    return this.medicamentoRepository.find();
+  async findAll(user: AuthenticatedUser): Promise<MedicamentoEntity[]> {
+    // The ownership filter is part of the SQL query (join on mascotas).
+    return this.medicamentoRepository.find({
+      where: petRecordOwnershipWhere<MedicamentoEntity>(user),
+    });
   }
 
   async findById(
     id: string,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: MedicamentoEntity }> {
-    const data = await this.medicamentoRepository.findOne({ where: { id } });
+    // Foreign records are excluded by the query itself and reported as 404.
+    const data = await this.medicamentoRepository.findOne({
+      where: { id, ...petRecordOwnershipWhere<MedicamentoEntity>(user) },
+    });
 
     if (!data) {
       throw new NotFoundException(`Medicamento con ID ${id} no encontrado`);
@@ -42,16 +55,11 @@ export class MedicamentosService {
 
   async create(
     medicamentoPayload: CreateMedicamentoDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: MedicamentoEntity }> {
-    const mascota = await this.mascotaRepository.findOne({
-      where: { id: medicamentoPayload.mascotaId },
-    });
-
-    if (!mascota) {
-      throw new NotFoundException(
-        `Mascota con ID ${medicamentoPayload.mascotaId} no encontrada`,
-      );
-    }
+    // Unknown pets and pets owned by someone else both produce 404, so a
+    // client-supplied mascotaId cannot attach records to another owner's pet.
+    await findAccessibleMascota(this.mascotaRepository, medicamentoPayload.mascotaId, user);
 
     const newMedicamento = this.medicamentoRepository.create({
       mascotaId: medicamentoPayload.mascotaId,
@@ -75,9 +83,11 @@ export class MedicamentosService {
   async update(
     id: string,
     medicamentoChanges: UpdateMedicamentoDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: MedicamentoEntity }> {
+    // Ownership is verified by the lookup itself, before any field changes.
     const medicamento = await this.medicamentoRepository.findOne({
-      where: { id },
+      where: { id, ...petRecordOwnershipWhere<MedicamentoEntity>(user) },
     });
 
     if (!medicamento) {
@@ -122,8 +132,8 @@ export class MedicamentosService {
     };
   }
 
-  async delete(id: string): Promise<{ message: string }> {
-    const result = await this.medicamentoRepository.delete(id);
+  async delete(id: string, user: AuthenticatedUser): Promise<{ message: string }> {
+    const result = await deletePetRecord(this.medicamentoRepository, id, user);
 
     if (!result.affected) {
       throw new NotFoundException(`Medicamento con ID ${id} no encontrado`);

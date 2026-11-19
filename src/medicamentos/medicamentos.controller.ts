@@ -13,36 +13,48 @@ import {
   UpdateMedicamentoDto,
 } from './medicamento.dto.js';
 import { MedicamentosService } from './medicamentos.service.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
 
 @Controller('medicamentos')
 export class MedicamentosController {
   constructor(private medicamentosService: MedicamentosService) {}
 
   @Get()
-  getMedicamentos() {
-    return this.medicamentosService.findAll();
+  getMedicamentos(@CurrentUser() user: AuthenticatedUser) {
+    return this.medicamentosService.findAll(user);
   }
 
   @Get(':id')
-  getMedicamentoById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.medicamentosService.findById(id);
+  getMedicamentoById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.medicamentosService.findById(id, user);
   }
 
   @Post()
-  createMedicamento(@Body() medicamentoPayload: CreateMedicamentoDto) {
-    return this.medicamentosService.create(medicamentoPayload);
+  createMedicamento(
+    @Body() medicamentoPayload: CreateMedicamentoDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.medicamentosService.create(medicamentoPayload, user);
   }
 
   @Put(':id')
   updateMedicamento(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() medicamentoChanges: UpdateMedicamentoDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.medicamentosService.update(id, medicamentoChanges);
+    return this.medicamentosService.update(id, medicamentoChanges, user);
   }
 
   @Delete(':id')
-  deleteMedicamento(@Param('id', ParseUUIDPipe) id: string) {
-    return this.medicamentosService.delete(id);
+  deleteMedicamento(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.medicamentosService.delete(id, user);
   }
 }

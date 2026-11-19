@@ -3,6 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { HistoriaClinicaEntity } from './historia-clinica.entity.js';
 import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import {
+  deletePetRecord,
+  findAccessibleMascota,
+  petRecordOwnershipWhere,
+} from '../auth/ownership.js';
 import {
   CreateHistoriaClinicaDto,
   UpdateHistoriaClinicaDto,
@@ -17,14 +23,21 @@ export class HistoriasClinicasService {
     private readonly mascotaRepository: Repository<MascotaEntity>,
   ) {}
 
-  async findAll(): Promise<HistoriaClinicaEntity[]> {
-    return this.historiaRepository.find();
+  async findAll(user: AuthenticatedUser): Promise<HistoriaClinicaEntity[]> {
+    // The ownership filter is part of the SQL query (join on mascotas).
+    return this.historiaRepository.find({
+      where: petRecordOwnershipWhere<HistoriaClinicaEntity>(user),
+    });
   }
 
   async findById(
     id: string,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: HistoriaClinicaEntity }> {
-    const data = await this.historiaRepository.findOne({ where: { id } });
+    // Foreign records are excluded by the query itself and reported as 404.
+    const data = await this.historiaRepository.findOne({
+      where: { id, ...petRecordOwnershipWhere<HistoriaClinicaEntity>(user) },
+    });
 
     if (!data) {
       throw new NotFoundException(
@@ -40,16 +53,11 @@ export class HistoriasClinicasService {
 
   async create(
     historiaPayload: CreateHistoriaClinicaDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: HistoriaClinicaEntity }> {
-    const mascota = await this.mascotaRepository.findOne({
-      where: { id: historiaPayload.mascotaId },
-    });
-
-    if (!mascota) {
-      throw new NotFoundException(
-        `Mascota con ID ${historiaPayload.mascotaId} no encontrada`,
-      );
-    }
+    // Unknown pets and pets owned by someone else both produce 404, so a
+    // client-supplied mascotaId cannot attach records to another owner's pet.
+    await findAccessibleMascota(this.mascotaRepository, historiaPayload.mascotaId, user);
 
     const newHistoria = this.historiaRepository.create({
       mascotaId: historiaPayload.mascotaId,
@@ -71,8 +79,12 @@ export class HistoriasClinicasService {
   async update(
     id: string,
     historiaChanges: UpdateHistoriaClinicaDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: HistoriaClinicaEntity }> {
-    const historia = await this.historiaRepository.findOne({ where: { id } });
+    // Ownership is verified by the lookup itself, before any field changes.
+    const historia = await this.historiaRepository.findOne({
+      where: { id, ...petRecordOwnershipWhere<HistoriaClinicaEntity>(user) },
+    });
 
     if (!historia) {
       throw new NotFoundException(
@@ -106,8 +118,8 @@ export class HistoriasClinicasService {
     };
   }
 
-  async delete(id: string): Promise<{ message: string }> {
-    const result = await this.historiaRepository.delete(id);
+  async delete(id: string, user: AuthenticatedUser): Promise<{ message: string }> {
+    const result = await deletePetRecord(this.historiaRepository, id, user);
 
     if (!result.affected) {
       throw new NotFoundException(

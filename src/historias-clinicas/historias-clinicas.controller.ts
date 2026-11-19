@@ -13,38 +13,48 @@ import {
   UpdateHistoriaClinicaDto,
 } from './historia-clinica.dto.js';
 import { HistoriasClinicasService } from './historias-clinicas.service.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
 
 @Controller('historias-clinicas')
 export class HistoriasClinicasController {
   constructor(private historiasClinicasService: HistoriasClinicasService) {}
 
   @Get()
-  getHistoriasClinicas() {
-    return this.historiasClinicasService.findAll();
+  getHistoriasClinicas(@CurrentUser() user: AuthenticatedUser) {
+    return this.historiasClinicasService.findAll(user);
   }
 
   @Get(':id')
-  getHistoriaClinicaById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.historiasClinicasService.findById(id);
+  getHistoriaClinicaById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.historiasClinicasService.findById(id, user);
   }
 
   @Post()
   createHistoriaClinica(
     @Body() historiaPayload: CreateHistoriaClinicaDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.historiasClinicasService.create(historiaPayload);
+    return this.historiasClinicasService.create(historiaPayload, user);
   }
 
   @Put(':id')
   updateHistoriaClinica(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() historiaChanges: UpdateHistoriaClinicaDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.historiasClinicasService.update(id, historiaChanges);
+    return this.historiasClinicasService.update(id, historiaChanges, user);
   }
 
   @Delete(':id')
-  deleteHistoriaClinica(@Param('id', ParseUUIDPipe) id: string) {
-    return this.historiasClinicasService.delete(id);
+  deleteHistoriaClinica(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.historiasClinicasService.delete(id, user);
   }
 }

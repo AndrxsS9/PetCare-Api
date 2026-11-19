@@ -18,9 +18,11 @@ export enum EspecieMascota {
 }
 
 export class CreateMascotaDto {
+  // Optional: defaults to the authenticated user. Only ADMIN may set another
+  // owner; regular users get 403 if it differs from their own id.
   @IsUUID('all', { message: 'usuarioId debe ser un UUID válido' })
-  @IsNotEmpty({ message: 'usuarioId es obligatorio' })
-  usuarioId: string;
+  @IsOptional()
+  usuarioId?: string;
 
   @IsString({ message: 'El nombre debe ser una cadena de texto' })
   @IsNotEmpty({ message: 'El nombre es obligatorio' })
