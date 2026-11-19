@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MinLength,
 } from 'class-validator';
 
 export enum RolUsuario {
@@ -24,6 +25,7 @@ export class CreateUsuarioDto {
 
   @IsString()
   @IsNotEmpty()
+  @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
   password: string;
 
   @IsString()
@@ -50,6 +52,7 @@ export class UpdateUsuarioDto {
 
   @IsString()
   @IsOptional()
+  @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
   password?: string;
 
   @IsString()
