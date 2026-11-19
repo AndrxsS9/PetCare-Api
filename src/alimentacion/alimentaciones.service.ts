@@ -1,97 +1,122 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Alimentacion } from './alimentacion.model.js';
-import { CreateAlimentacionDto, UpdateAlimentacionDto } from './alimentacion.dto.js';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AlimentacionEntity } from './alimentacion.entity.js';
+import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import {
+  CreateAlimentacionDto,
+  UpdateAlimentacionDto,
+} from './alimentacion.dto.js';
+
+const UPDATABLE_FIELDS = [
+  'tipoAlimento',
+  'marca',
+  'cantidad',
+  'unidad',
+  'frecuencia',
+  'horario',
+  'observaciones',
+] as const satisfies readonly (keyof UpdateAlimentacionDto)[];
 
 @Injectable()
 export class AlimentacionesService {
-  private alimentaciones: Alimentacion[] = [
-    {
-      id: '1',
-      mascotaId: '1',
-      tipoAlimento: 'Concentrado',
-      marca: 'Royal Canin',
-      cantidad: 250,
-      unidad: 'gramos',
-      frecuencia: '2 veces al día',
-      horario: '08:00 y 18:00',
-      observaciones: 'Dividir la porción en dos comidas',
-    },
-    {
-      id: '2',
-      mascotaId: '2',
-      tipoAlimento: 'Concentrado',
-      marca: 'Purina',
-      cantidad: 80,
-      unidad: 'gramos',
-      frecuencia: '2 veces al día',
-      horario: '09:00 y 19:00',
-      observaciones: '',
-    },
-  ];
+  constructor(
+    @InjectRepository(AlimentacionEntity)
+    private readonly alimentacionRepository: Repository<AlimentacionEntity>,
+    @InjectRepository(MascotaEntity)
+    private readonly mascotaRepository: Repository<MascotaEntity>,
+  ) {}
 
-  findAll() {
-    return this.alimentaciones;
+  async findAll(): Promise<AlimentacionEntity[]> {
+    return this.alimentacionRepository.find();
   }
 
-  findById(id: string) {
-    const data = this.alimentaciones.find(
-      (alimentacion) => alimentacion.id === id,
-    );
-    if (data === undefined) {
-      throw new NotFoundException(
-        `Alimentación con ID ${id} no encontrada`,
-      );
+  async findById(
+    id: string,
+  ): Promise<{ message: string; data: AlimentacionEntity }> {
+    const data = await this.alimentacionRepository.findOne({ where: { id } });
+
+    if (!data) {
+      throw new NotFoundException(`Alimentación con ID ${id} no encontrada`);
     }
+
     return {
       message: 'Alimentación encontrada',
       data,
     };
   }
 
-  create(alimentacionPayload: CreateAlimentacionDto) {
-    const newAlimentacion: Alimentacion = {
-      ...alimentacionPayload,
-      id: `${new Date().getTime()}`,
+  async create(
+    alimentacionPayload: CreateAlimentacionDto,
+  ): Promise<{ message: string; data: AlimentacionEntity }> {
+    const mascota = await this.mascotaRepository.findOne({
+      where: { id: alimentacionPayload.mascotaId },
+    });
+
+    if (!mascota) {
+      throw new NotFoundException(
+        `Mascota con ID ${alimentacionPayload.mascotaId} no encontrada`,
+      );
+    }
+
+    const newAlimentacion = this.alimentacionRepository.create({
+      mascotaId: alimentacionPayload.mascotaId,
+      tipoAlimento: alimentacionPayload.tipoAlimento,
+      marca: alimentacionPayload.marca,
+      cantidad: alimentacionPayload.cantidad,
+      unidad: alimentacionPayload.unidad,
+      frecuencia: alimentacionPayload.frecuencia,
+      horario: alimentacionPayload.horario,
       observaciones: alimentacionPayload.observaciones ?? '',
-    };
-    this.alimentaciones.push(newAlimentacion);
+    });
+
+    const data = await this.alimentacionRepository.save(newAlimentacion);
+
     return {
       message: 'Alimentación creada con éxito',
-      data: newAlimentacion,
+      data,
     };
   }
 
-  update(id: string, alimentacionChanges: UpdateAlimentacionDto) {
-    const position = this.alimentaciones.findIndex(
-      (alimentacion) => alimentacion.id === id,
-    );
-    if (position === -1) {
-      throw new NotFoundException(
-        `Alimentación con ID ${id} no encontrada`,
-      );
+  async update(
+    id: string,
+    alimentacionChanges: UpdateAlimentacionDto,
+  ): Promise<{ message: string; data: AlimentacionEntity }> {
+    const alimentacion = await this.alimentacionRepository.findOne({
+      where: { id },
+    });
+
+    if (!alimentacion) {
+      throw new NotFoundException(`Alimentación con ID ${id} no encontrada`);
     }
-    const existingAlimentacion = this.alimentaciones[position];
-    const updatedAlimentacion = {
-      ...existingAlimentacion,
-      ...alimentacionChanges,
-    };
-    this.alimentaciones[position] = updatedAlimentacion;
+
+    const changes: Partial<AlimentacionEntity> = {};
+    for (const field of UPDATABLE_FIELDS) {
+      const value = alimentacionChanges[field];
+      if (value !== undefined) {
+        (changes as Record<string, unknown>)[field] = value;
+      }
+    }
+
+    const updatedAlimentacion = this.alimentacionRepository.merge(
+      alimentacion,
+      changes,
+    );
+    const data = await this.alimentacionRepository.save(updatedAlimentacion);
+
     return {
       message: 'Alimentación actualizada con éxito',
-      data: updatedAlimentacion,
+      data,
     };
   }
 
-  delete(id: string) {
-    const position = this.alimentaciones.findIndex(
-      (alimentacion) => alimentacion.id === id,
-    );
-    if (position === -1) {
-      throw new NotFoundException(
-        `Alimentación con ID ${id} no encontrada`,
-      );
+  async delete(id: string): Promise<{ message: string }> {
+    const result = await this.alimentacionRepository.delete(id);
+
+    if (!result.affected) {
+      throw new NotFoundException(`Alimentación con ID ${id} no encontrada`);
     }
-    this.alimentaciones.splice(position, 1);
+
     return {
       message: 'Alimentación eliminada con éxito',
     };
