@@ -10,8 +10,7 @@ import { AlimentacionModule } from './alimentacion/alimentacion.module.js';
 import { CitasModule } from './citas/citas.module.js';
 import { VacunasModule } from './vacunas/vacunas.module.js';
 import { HistoriasClinicasModule } from './historias-clinicas/historias-clinicas.module.js';
-import { MedicamentosController } from './medicamentos/medicamentos.controller.js';
-import { MedicamentosService } from './medicamentos/medicamentos.service.js';
+import { MedicamentosModule } from './medicamentos/medicamentos.module.js';
 
 @Module({
   imports: [
@@ -26,14 +25,9 @@ import { MedicamentosService } from './medicamentos/medicamentos.service.js';
     HistoriasClinicasModule,
     AlimentacionModule,
     VacunasModule,
+    MedicamentosModule,
   ],
-  controllers: [
-    AppController,
-    MedicamentosController,
-  ],
-  providers: [
-    AppService,
-    MedicamentosService,
-  ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

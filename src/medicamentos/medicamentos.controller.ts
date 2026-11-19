@@ -1,5 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
-import { CreateMedicamentoDto, UpdateMedicamentoDto } from './medicamento.dto.js';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+} from '@nestjs/common';
+import {
+  CreateMedicamentoDto,
+  UpdateMedicamentoDto,
+} from './medicamento.dto.js';
 import { MedicamentosService } from './medicamentos.service.js';
 
 @Controller('medicamentos')
@@ -12,7 +24,7 @@ export class MedicamentosController {
   }
 
   @Get(':id')
-  getMedicamentoById(@Param('id') id: string) {
+  getMedicamentoById(@Param('id', ParseUUIDPipe) id: string) {
     return this.medicamentosService.findById(id);
   }
 
@@ -23,14 +35,14 @@ export class MedicamentosController {
 
   @Put(':id')
   updateMedicamento(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() medicamentoChanges: UpdateMedicamentoDto,
   ) {
     return this.medicamentosService.update(id, medicamentoChanges);
   }
 
   @Delete(':id')
-  deleteMedicamento(@Param('id') id: string) {
+  deleteMedicamento(@Param('id', ParseUUIDPipe) id: string) {
     return this.medicamentosService.delete(id);
   }
 }
