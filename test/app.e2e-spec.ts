@@ -1,29 +1,21 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module.js';
+import { createE2eApp, E2eContext } from './e2e/e2e-app.js';
 
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let ctx: E2eContext | undefined;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+  beforeAll(async () => {
+    ctx = await createE2eApp();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
+  afterAll(async () => {
+    await ctx?.app.close();
+  });
+
+  it('/ (GET) returns the health-check message', () => {
+    return request(ctx!.app.getHttpServer())
       .get('/')
       .expect(200)
-      .expect('Hello World!');
-  });
-
-  afterEach(async () => {
-    await app.close();
+      .expect('PetCare API funcionando!');
   });
 });

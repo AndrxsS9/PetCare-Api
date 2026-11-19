@@ -8,6 +8,8 @@ import {
   CreateMedicamentoDto,
   UpdateMedicamentoDto,
 } from './medicamento.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching the other newer specs.
@@ -29,6 +31,19 @@ const expectCalendarDay = (
   expect([date.getHours(), date.getMinutes(), date.getSeconds()]).toEqual([
     0, 0, 0,
   ]);
+};
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
 };
 
 describe('MedicamentosService', () => {
@@ -97,14 +112,14 @@ describe('MedicamentosService', () => {
       const medicamentos = [buildMedicamento()];
       mockMedicamentoRepo.find.mockResolvedValue(medicamentos);
 
-      await expect(service.findAll()).resolves.toEqual(medicamentos);
+      await expect(service.findAll(adminUser)).resolves.toEqual(medicamentos);
       expect(mockMedicamentoRepo.find).toHaveBeenCalledTimes(1);
     });
 
     it('returns an empty list when there are no records', async () => {
       mockMedicamentoRepo.find.mockResolvedValue([]);
 
-      await expect(service.findAll()).resolves.toEqual([]);
+      await expect(service.findAll(adminUser)).resolves.toEqual([]);
     });
   });
 
@@ -113,7 +128,7 @@ describe('MedicamentosService', () => {
       const medicamento = buildMedicamento();
       mockMedicamentoRepo.findOne.mockResolvedValue(medicamento);
 
-      await expect(service.findById(medicamentoId)).resolves.toEqual({
+      await expect(service.findById(medicamentoId, adminUser)).resolves.toEqual({
         message: 'Medicamento encontrado',
         data: medicamento,
       });
@@ -126,7 +141,7 @@ describe('MedicamentosService', () => {
       mockMedicamentoRepo.findOne.mockResolvedValue(null);
 
       const error = await service
-        .findById(medicamentoId)
+        .findById(medicamentoId, adminUser)
         .catch((e: unknown) => e);
 
       expect(error).toBeInstanceOf(NotFoundException);
@@ -152,7 +167,7 @@ describe('MedicamentosService', () => {
     it('creates a medication record for an existing pet', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      const result = await service.create(payload);
+      const result = await service.create(payload, adminUser);
 
       expect(mockMascotaRepo.findOne).toHaveBeenCalledWith({
         where: { id: mascotaId },
@@ -185,7 +200,7 @@ describe('MedicamentosService', () => {
         ...payload,
         inicio: '2024-02-29T23:30:00-05:00',
         fin: '2024-03-01T01:00:00+09:00',
-      });
+      }, adminUser);
 
       const created = mockMedicamentoRepo.create.mock.calls[0][0];
       // The calendar day written by the client is kept, whatever the offset.
@@ -197,7 +212,7 @@ describe('MedicamentosService', () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
       const { estado: _, ...withoutEstado } = payload;
 
-      const result = await service.create(withoutEstado);
+      const result = await service.create(withoutEstado, adminUser);
 
       expect(mockMedicamentoRepo.create.mock.calls[0][0].estado).toBe(true);
       expect(result.data.estado).toBe(true);
@@ -206,7 +221,7 @@ describe('MedicamentosService', () => {
     it('keeps an explicit estado false', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      const result = await service.create({ ...payload, estado: false });
+      const result = await service.create({ ...payload, estado: false }, adminUser);
 
       expect(mockMedicamentoRepo.create.mock.calls[0][0].estado).toBe(false);
       expect(result.data.estado).toBe(false);
@@ -216,7 +231,7 @@ describe('MedicamentosService', () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
       const { observaciones: _, ...withoutObservaciones } = payload;
 
-      const result = await service.create(withoutObservaciones);
+      const result = await service.create(withoutObservaciones, adminUser);
 
       expect(mockMedicamentoRepo.create.mock.calls[0][0].observaciones).toBe(
         '',
@@ -227,7 +242,7 @@ describe('MedicamentosService', () => {
     it('throws NotFoundException when the pet does not exist', async () => {
       mockMascotaRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.create(payload)).rejects.toThrow(
+      await expect(service.create(payload, adminUser)).rejects.toThrow(
         new NotFoundException(`Mascota con ID ${mascotaId} no encontrada`),
       );
       expect(mockMedicamentoRepo.create).not.toHaveBeenCalled();
@@ -244,7 +259,7 @@ describe('MedicamentosService', () => {
         dosis: '500 mg',
         // simulates an omitted field present as undefined on the DTO instance
         frecuencia: undefined,
-      });
+      }, adminUser);
 
       expect(mockMedicamentoRepo.findOne).toHaveBeenCalledWith({
         where: { id: medicamentoId },
@@ -262,7 +277,7 @@ describe('MedicamentosService', () => {
     it('keeps an explicit estado false', async () => {
       mockMedicamentoRepo.findOne.mockResolvedValue(buildMedicamento());
 
-      const result = await service.update(medicamentoId, { estado: false });
+      const result = await service.update(medicamentoId, { estado: false }, adminUser);
 
       expect(mockMedicamentoRepo.merge.mock.calls[0][1]).toEqual({
         estado: false,
@@ -276,7 +291,7 @@ describe('MedicamentosService', () => {
       await service.update(medicamentoId, {
         inicio: '2024-07-01',
         fin: '2024-07-08T23:00:00-05:00',
-      });
+      }, adminUser);
 
       const changes = mockMedicamentoRepo.merge.mock.calls[0][1];
       expect(Object.keys(changes).sort()).toEqual(['fin', 'inicio']);
@@ -289,7 +304,7 @@ describe('MedicamentosService', () => {
 
       const result = await service.update(medicamentoId, {
         observaciones: '',
-      });
+      }, adminUser);
 
       expect(mockMedicamentoRepo.merge.mock.calls[0][1]).toEqual({
         observaciones: '',
@@ -308,7 +323,7 @@ describe('MedicamentosService', () => {
         fin: '2024-08-10',
         observaciones: 'Suspender si hay vómito',
         estado: false,
-      });
+      }, adminUser);
 
       const changes = mockMedicamentoRepo.merge.mock.calls[0][1];
       expect(changes).toEqual({
@@ -330,7 +345,7 @@ describe('MedicamentosService', () => {
         id: otherId,
         mascotaId: otherId,
         dosis: '100 mg',
-      } as UpdateMedicamentoDto);
+      } as UpdateMedicamentoDto, adminUser);
 
       expect(mockMedicamentoRepo.merge.mock.calls[0][1]).toEqual({
         dosis: '100 mg',
@@ -343,7 +358,7 @@ describe('MedicamentosService', () => {
       mockMedicamentoRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.update(medicamentoId, { dosis: '100 mg' }),
+        service.update(medicamentoId, { dosis: '100 mg' }, adminUser),
       ).rejects.toThrow(
         new NotFoundException(
           `Medicamento con ID ${medicamentoId} no encontrado`,
@@ -358,7 +373,7 @@ describe('MedicamentosService', () => {
     it('deletes an existing record', async () => {
       mockMedicamentoRepo.delete.mockResolvedValue({ affected: 1, raw: [] });
 
-      await expect(service.delete(medicamentoId)).resolves.toEqual({
+      await expect(service.delete(medicamentoId, adminUser)).resolves.toEqual({
         message: 'Medicamento eliminado con éxito',
       });
       expect(mockMedicamentoRepo.delete).toHaveBeenCalledWith(medicamentoId);
@@ -367,7 +382,7 @@ describe('MedicamentosService', () => {
     it('throws NotFoundException for a nonexistent record', async () => {
       mockMedicamentoRepo.delete.mockResolvedValue({ affected: 0, raw: [] });
 
-      await expect(service.delete(medicamentoId)).rejects.toThrow(
+      await expect(service.delete(medicamentoId, adminUser)).rejects.toThrow(
         NotFoundException,
       );
     });

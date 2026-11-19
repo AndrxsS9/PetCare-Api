@@ -7,6 +7,21 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AlimentacionController } from './alimentacion.controller.js';
 import { AlimentacionesService } from './alimentaciones.service.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
+};
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching the other newer specs.
@@ -47,6 +62,11 @@ describe('AlimentacionController (HTTP)', () => {
     }).compile();
 
     app = module.createNestApplication();
+    // Stands in for the global JwtAuthGuard, which sets request.user.
+    app.use((req: { user?: AuthenticatedUser }, _res: unknown, next: () => void) => {
+      req.user = adminUser;
+      next();
+    });
     // Same options as the global pipe registered in main.ts.
     app.useGlobalPipes(
       new ValidationPipe({
@@ -83,7 +103,7 @@ describe('AlimentacionController (HTTP)', () => {
         .get(`${baseUrl}/${alimentacionId}`)
         .expect(200);
 
-      expect(mockService.findById).toHaveBeenCalledWith(alimentacionId);
+      expect(mockService.findById).toHaveBeenCalledWith(alimentacionId, adminUser);
       expect(res.body).toEqual(response);
     });
 
@@ -101,6 +121,7 @@ describe('AlimentacionController (HTTP)', () => {
 
       expect(mockService.create).toHaveBeenCalledWith(
         expect.objectContaining(validPayload),
+        adminUser,
       );
       expect(res.body).toEqual(response);
     });
@@ -121,6 +142,7 @@ describe('AlimentacionController (HTTP)', () => {
       expect(mockService.update).toHaveBeenCalledWith(
         alimentacionId,
         expect.objectContaining(changes),
+        adminUser,
       );
       expect(res.body).toEqual(response);
     });
@@ -133,7 +155,7 @@ describe('AlimentacionController (HTTP)', () => {
         .delete(`${baseUrl}/${alimentacionId}`)
         .expect(200);
 
-      expect(mockService.delete).toHaveBeenCalledWith(alimentacionId);
+      expect(mockService.delete).toHaveBeenCalledWith(alimentacionId, adminUser);
       expect(res.body).toEqual(response);
     });
   });
@@ -175,7 +197,7 @@ describe('AlimentacionController (HTTP)', () => {
         .get(`${baseUrl}/${alimentacionId}`)
         .expect(404);
 
-      expect(mockService.findById).toHaveBeenCalledWith(alimentacionId);
+      expect(mockService.findById).toHaveBeenCalledWith(alimentacionId, adminUser);
       expect(res.body).toEqual(notFoundBody(alimentacionNotFound));
     });
 
@@ -192,6 +214,7 @@ describe('AlimentacionController (HTTP)', () => {
       expect(mockService.update).toHaveBeenCalledWith(
         alimentacionId,
         expect.objectContaining({ cantidad: 300 }),
+        adminUser,
       );
       expect(res.body).toEqual(notFoundBody(alimentacionNotFound));
     });
@@ -205,7 +228,7 @@ describe('AlimentacionController (HTTP)', () => {
         .delete(`${baseUrl}/${alimentacionId}`)
         .expect(404);
 
-      expect(mockService.delete).toHaveBeenCalledWith(alimentacionId);
+      expect(mockService.delete).toHaveBeenCalledWith(alimentacionId, adminUser);
       expect(res.body).toEqual(notFoundBody(alimentacionNotFound));
     });
 
@@ -222,6 +245,7 @@ describe('AlimentacionController (HTTP)', () => {
 
       expect(mockService.create).toHaveBeenCalledWith(
         expect.objectContaining(validPayload),
+        adminUser,
       );
       expect(res.body).toEqual(notFoundBody(mascotaNotFound));
     });
@@ -306,6 +330,7 @@ describe('AlimentacionController (HTTP)', () => {
       expect(mockService.update).toHaveBeenCalledWith(
         alimentacionId,
         expect.objectContaining({ marca: 'Purina' }),
+        adminUser,
       );
     });
   });

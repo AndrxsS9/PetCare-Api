@@ -5,6 +5,21 @@ import { CitasService } from './citas.service.js';
 import { CitaEntity } from './cita.entity.js';
 import { MascotaEntity } from '../mascotas/mascota.entity.js';
 import { CreateCitaDto, EstadoCita } from './cita.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
+};
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching the other newer specs.
@@ -73,14 +88,14 @@ describe('CitasService', () => {
       const citas = [buildCita()];
       mockCitaRepo.find.mockResolvedValue(citas);
 
-      await expect(service.findAll()).resolves.toEqual(citas);
+      await expect(service.findAll(adminUser)).resolves.toEqual(citas);
       expect(mockCitaRepo.find).toHaveBeenCalledTimes(1);
     });
 
     it('returns an empty array when there are no appointments', async () => {
       mockCitaRepo.find.mockResolvedValue([]);
 
-      await expect(service.findAll()).resolves.toEqual([]);
+      await expect(service.findAll(adminUser)).resolves.toEqual([]);
     });
   });
 
@@ -89,7 +104,7 @@ describe('CitasService', () => {
       const cita = buildCita();
       mockCitaRepo.findOne.mockResolvedValue(cita);
 
-      await expect(service.findById(citaId)).resolves.toEqual({
+      await expect(service.findById(citaId, adminUser)).resolves.toEqual({
         message: 'Cita encontrada',
         data: cita,
       });
@@ -101,7 +116,7 @@ describe('CitasService', () => {
     it('throws NotFoundException when the appointment does not exist', async () => {
       mockCitaRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById(citaId)).rejects.toThrow(
+      await expect(service.findById(citaId, adminUser)).rejects.toThrow(
         new NotFoundException(`Cita con ID ${citaId} no encontrada`),
       );
     });
@@ -119,7 +134,7 @@ describe('CitasService', () => {
     it('creates an appointment associated with an existing pet', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      const result = await service.create(payload);
+      const result = await service.create(payload, adminUser);
 
       expect(mockMascotaRepo.findOne).toHaveBeenCalledWith({
         where: { id: mascotaId },
@@ -140,7 +155,7 @@ describe('CitasService', () => {
     it('throws NotFoundException for an unknown pet and saves nothing', async () => {
       mockMascotaRepo.findOne.mockResolvedValue(null);
 
-      await expect(service.create(payload)).rejects.toThrow(
+      await expect(service.create(payload, adminUser)).rejects.toThrow(
         new NotFoundException(`Mascota con ID ${mascotaId} no encontrada`),
       );
       expect(mockCitaRepo.create).not.toHaveBeenCalled();
@@ -151,7 +166,7 @@ describe('CitasService', () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
       const { estado: _, ...withoutEstado } = payload;
 
-      const result = await service.create(withoutEstado);
+      const result = await service.create(withoutEstado, adminUser);
 
       expect(mockCitaRepo.create.mock.calls[0][0].estado).toBe(
         EstadoCita.PROGRAMADA,
@@ -162,7 +177,7 @@ describe('CitasService', () => {
     it('converts fechaHora from an ISO string to a Date', async () => {
       mockMascotaRepo.findOne.mockResolvedValue({ id: mascotaId });
 
-      const result = await service.create(payload);
+      const result = await service.create(payload, adminUser);
 
       const created = mockCitaRepo.create.mock.calls[0][0];
       expect(created.fechaHora).toBeInstanceOf(Date);
@@ -180,7 +195,7 @@ describe('CitasService', () => {
         estado: EstadoCita.CANCELADA,
         // simulates an omitted field present as undefined on the DTO instance
         motivo: undefined,
-      });
+      }, adminUser);
 
       expect(mockCitaRepo.merge).toHaveBeenCalledWith(cita, {
         estado: EstadoCita.CANCELADA,
@@ -195,7 +210,7 @@ describe('CitasService', () => {
       mockCitaRepo.findOne.mockResolvedValue(buildCita());
       const nuevaFecha = '2027-01-15T15:30:00.000Z';
 
-      const result = await service.update(citaId, { fechaHora: nuevaFecha });
+      const result = await service.update(citaId, { fechaHora: nuevaFecha }, adminUser);
 
       expect(result.data.fechaHora).toBeInstanceOf(Date);
       expect(result.data.fechaHora.toISOString()).toBe(nuevaFecha);
@@ -206,7 +221,7 @@ describe('CitasService', () => {
       mockCitaRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.update(citaId, { motivo: 'Revisión' }),
+        service.update(citaId, { motivo: 'Revisión' }, adminUser),
       ).rejects.toThrow(
         new NotFoundException(`Cita con ID ${citaId} no encontrada`),
       );
@@ -219,7 +234,7 @@ describe('CitasService', () => {
     it('deletes an existing appointment', async () => {
       mockCitaRepo.delete.mockResolvedValue({ affected: 1, raw: [] });
 
-      await expect(service.delete(citaId)).resolves.toEqual({
+      await expect(service.delete(citaId, adminUser)).resolves.toEqual({
         message: 'Cita eliminada con éxito',
       });
       expect(mockCitaRepo.delete).toHaveBeenCalledWith(citaId);
@@ -228,7 +243,7 @@ describe('CitasService', () => {
     it('throws NotFoundException when nothing was deleted', async () => {
       mockCitaRepo.delete.mockResolvedValue({ affected: 0, raw: [] });
 
-      await expect(service.delete(citaId)).rejects.toThrow(
+      await expect(service.delete(citaId, adminUser)).rejects.toThrow(
         new NotFoundException(`Cita con ID ${citaId} no encontrada`),
       );
     });

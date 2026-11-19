@@ -1,17 +1,15 @@
 import { NestFactory } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module.js';
-import { ValidationPipe } from '@nestjs/common';
+import { configureApp } from './app.setup.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors();
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  const config = app.get(ConfigService);
+  configureApp(app, {
+    NODE_ENV: config.get<string>('NODE_ENV'),
+    SWAGGER_ENABLED: config.get<string>('SWAGGER_ENABLED'),
+  });
   await app.listen(process.env.PORT ?? 3000);
 }
 await bootstrap();

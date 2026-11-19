@@ -199,4 +199,38 @@ describe('UsuariosService', () => {
       await expect(service.delete('inexistente')).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('findByEmailForAuth', () => {
+    it('debe retornar la entidad completa (con hash) para verificar credenciales', async () => {
+      mockRepo.findOne.mockResolvedValue(mockUsuario);
+
+      const result = await service.findByEmailForAuth('edgar@petcare.com');
+
+      expect(mockRepo.findOne).toHaveBeenCalledWith({ where: { email: 'edgar@petcare.com' } });
+      expect(result).toBe(mockUsuario);
+    });
+
+    it('debe retornar null si el correo no existe', async () => {
+      mockRepo.findOne.mockResolvedValue(null);
+      await expect(service.findByEmailForAuth('nadie@petcare.com')).resolves.toBeNull();
+    });
+  });
+
+  describe('findSafeById', () => {
+    it('debe retornar el usuario sin la contraseña', async () => {
+      mockRepo.findOne.mockResolvedValue(mockUsuario);
+
+      const result = await service.findSafeById(mockUsuario.id);
+
+      expect(mockRepo.findOne).toHaveBeenCalledWith({ where: { id: mockUsuario.id } });
+      expect(result).not.toBeNull();
+      expect(result).not.toHaveProperty('password');
+      expect(result?.email).toBe('edgar@petcare.com');
+    });
+
+    it('debe retornar null si el usuario no existe', async () => {
+      mockRepo.findOne.mockResolvedValue(null);
+      await expect(service.findSafeById('no-existe')).resolves.toBeNull();
+    });
+  });
 });

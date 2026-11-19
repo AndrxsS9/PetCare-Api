@@ -8,9 +8,24 @@ import request from 'supertest';
 import { CitasController } from './citas.controller.js';
 import { CitasService } from './citas.service.js';
 import { EstadoCita } from './cita.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching app.controller.spec.ts.
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
+};
+
 describe('CitasController (route validation)', () => {
   let app: INestApplication;
 
@@ -41,6 +56,11 @@ describe('CitasController (route validation)', () => {
     }).compile();
 
     app = module.createNestApplication();
+    // Stands in for the global JwtAuthGuard, which sets request.user.
+    app.use((req: { user?: AuthenticatedUser }, _res: unknown, next: () => void) => {
+      req.user = adminUser;
+      next();
+    });
     // Same options as the global pipe registered in main.ts.
     app.useGlobalPipes(
       new ValidationPipe({
@@ -83,7 +103,7 @@ describe('CitasController (route validation)', () => {
         .get(`/citas/${citaId}`)
         .expect(200);
 
-      expect(mockService.findById).toHaveBeenCalledWith(citaId);
+      expect(mockService.findById).toHaveBeenCalledWith(citaId, adminUser);
       expect(res.body).toEqual(response);
     });
 
@@ -96,7 +116,7 @@ describe('CitasController (route validation)', () => {
         .delete(`/citas/${citaId}`)
         .expect(200);
 
-      expect(mockService.delete).toHaveBeenCalledWith(citaId);
+      expect(mockService.delete).toHaveBeenCalledWith(citaId, adminUser);
     });
   });
 
@@ -114,6 +134,7 @@ describe('CitasController (route validation)', () => {
 
       expect(mockService.create).toHaveBeenCalledWith(
         expect.objectContaining(validPayload),
+        adminUser,
       );
     });
 
@@ -152,6 +173,7 @@ describe('CitasController (route validation)', () => {
       expect(mockService.update).toHaveBeenCalledWith(
         citaId,
         expect.objectContaining({ estado: EstadoCita.REALIZADA }),
+        adminUser,
       );
     });
 
@@ -186,7 +208,7 @@ describe('CitasController (route validation)', () => {
         .get(`/citas/${citaId}`)
         .expect(404);
 
-      expect(mockService.findById).toHaveBeenCalledWith(citaId);
+      expect(mockService.findById).toHaveBeenCalledWith(citaId, adminUser);
       expect(res.body).toEqual(notFoundBody(citaNotFound));
     });
 
@@ -201,6 +223,7 @@ describe('CitasController (route validation)', () => {
       expect(mockService.update).toHaveBeenCalledWith(
         citaId,
         expect.objectContaining({ motivo: 'Revisión' }),
+        adminUser,
       );
       expect(res.body).toEqual(notFoundBody(citaNotFound));
     });
@@ -212,7 +235,7 @@ describe('CitasController (route validation)', () => {
         .delete(`/citas/${citaId}`)
         .expect(404);
 
-      expect(mockService.delete).toHaveBeenCalledWith(citaId);
+      expect(mockService.delete).toHaveBeenCalledWith(citaId, adminUser);
       expect(res.body).toEqual(notFoundBody(citaNotFound));
     });
 
@@ -229,6 +252,7 @@ describe('CitasController (route validation)', () => {
 
       expect(mockService.create).toHaveBeenCalledWith(
         expect.objectContaining(validPayload),
+        adminUser,
       );
       expect(res.body).toEqual(notFoundBody(mascotaNotFound));
     });

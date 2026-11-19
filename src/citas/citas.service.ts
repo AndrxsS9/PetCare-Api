@@ -3,6 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CitaEntity } from './cita.entity.js';
 import { MascotaEntity } from '../mascotas/mascota.entity.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import {
+  deletePetRecord,
+  findAccessibleMascota,
+  petRecordOwnershipWhere,
+} from '../auth/ownership.js';
 import { CreateCitaDto, UpdateCitaDto, EstadoCita } from './cita.dto.js';
 
 @Injectable()
@@ -14,12 +20,21 @@ export class CitasService {
     private readonly mascotaRepository: Repository<MascotaEntity>,
   ) {}
 
-  async findAll(): Promise<CitaEntity[]> {
-    return this.citaRepository.find();
+  async findAll(user: AuthenticatedUser): Promise<CitaEntity[]> {
+    // The ownership filter is part of the SQL query (join on mascotas).
+    return this.citaRepository.find({
+      where: petRecordOwnershipWhere<CitaEntity>(user),
+    });
   }
 
-  async findById(id: string): Promise<{ message: string; data: CitaEntity }> {
-    const data = await this.citaRepository.findOne({ where: { id } });
+  async findById(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<{ message: string; data: CitaEntity }> {
+    // Foreign records are excluded by the query itself and reported as 404.
+    const data = await this.citaRepository.findOne({
+      where: { id, ...petRecordOwnershipWhere<CitaEntity>(user) },
+    });
 
     if (!data) {
       throw new NotFoundException(`Cita con ID ${id} no encontrada`);
@@ -33,16 +48,11 @@ export class CitasService {
 
   async create(
     citaPayload: CreateCitaDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: CitaEntity }> {
-    const mascota = await this.mascotaRepository.findOne({
-      where: { id: citaPayload.mascotaId },
-    });
-
-    if (!mascota) {
-      throw new NotFoundException(
-        `Mascota con ID ${citaPayload.mascotaId} no encontrada`,
-      );
-    }
+    // Unknown pets and pets owned by someone else both produce 404, so a
+    // client-supplied mascotaId cannot attach records to another owner's pet.
+    await findAccessibleMascota(this.mascotaRepository, citaPayload.mascotaId, user);
 
     const newCita = this.citaRepository.create({
       mascotaId: citaPayload.mascotaId,
@@ -63,8 +73,12 @@ export class CitasService {
   async update(
     id: string,
     citaChanges: UpdateCitaDto,
+    user: AuthenticatedUser,
   ): Promise<{ message: string; data: CitaEntity }> {
-    const cita = await this.citaRepository.findOne({ where: { id } });
+    // Ownership is verified by the lookup itself, before any field changes.
+    const cita = await this.citaRepository.findOne({
+      where: { id, ...petRecordOwnershipWhere<CitaEntity>(user) },
+    });
 
     if (!cita) {
       throw new NotFoundException(`Cita con ID ${id} no encontrada`);
@@ -89,8 +103,8 @@ export class CitasService {
     };
   }
 
-  async delete(id: string): Promise<{ message: string }> {
-    const result = await this.citaRepository.delete(id);
+  async delete(id: string, user: AuthenticatedUser): Promise<{ message: string }> {
+    const result = await deletePetRecord(this.citaRepository, id, user);
 
     if (!result.affected) {
       throw new NotFoundException(`Cita con ID ${id} no encontrada`);

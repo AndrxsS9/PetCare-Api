@@ -8,6 +8,21 @@ import request from 'supertest';
 import { VacunasController } from './vacunas.controller.js';
 import { VacunasService } from './vacunas.service.js';
 import { CreateVacunaDto, UpdateVacunaDto } from './vacuna.dto.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
+};
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching the other newer specs.
@@ -57,6 +72,11 @@ describe('VacunasController (HTTP)', () => {
     }).compile();
 
     app = module.createNestApplication();
+    // Stands in for the global JwtAuthGuard, which sets request.user.
+    app.use((req: { user?: AuthenticatedUser }, _res: unknown, next: () => void) => {
+      req.user = adminUser;
+      next();
+    });
     // Same options as the global pipe registered in main.ts.
     app.useGlobalPipes(
       new ValidationPipe({
@@ -79,7 +99,7 @@ describe('VacunasController (HTTP)', () => {
       const res = await request(app.getHttpServer()).get(baseUrl).expect(200);
 
       expect(mockService.findAll).toHaveBeenCalledTimes(1);
-      expect(mockService.findAll).toHaveBeenCalledWith();
+      expect(mockService.findAll).toHaveBeenCalledWith(adminUser);
       expect(res.body).toEqual([storedVacuna]);
     });
 
@@ -100,7 +120,7 @@ describe('VacunasController (HTTP)', () => {
         .expect(200);
 
       expect(mockService.findById).toHaveBeenCalledTimes(1);
-      expect(mockService.findById).toHaveBeenCalledWith(vacunaId);
+      expect(mockService.findById).toHaveBeenCalledWith(vacunaId, adminUser);
       expect(res.body).toEqual(response);
     });
 
@@ -153,7 +173,7 @@ describe('VacunasController (HTTP)', () => {
         .expect(200);
 
       expect(mockService.delete).toHaveBeenCalledTimes(1);
-      expect(mockService.delete).toHaveBeenCalledWith(vacunaId);
+      expect(mockService.delete).toHaveBeenCalledWith(vacunaId, adminUser);
       expect(res.body).toEqual(response);
     });
   });
@@ -212,7 +232,7 @@ describe('VacunasController (HTTP)', () => {
         .get(`${baseUrl}/${vacunaId}`)
         .expect(404);
 
-      expect(mockService.findById).toHaveBeenCalledWith(vacunaId);
+      expect(mockService.findById).toHaveBeenCalledWith(vacunaId, adminUser);
       expect(res.body).toEqual(notFoundBody(vacunaNotFound));
     });
 
@@ -228,7 +248,7 @@ describe('VacunasController (HTTP)', () => {
 
       expect(mockService.update).toHaveBeenCalledWith(vacunaId, {
         nombreVacuna: 'Moquillo',
-      });
+      }, adminUser);
       expect(res.body).toEqual(notFoundBody(vacunaNotFound));
     });
 
@@ -241,7 +261,7 @@ describe('VacunasController (HTTP)', () => {
         .delete(`${baseUrl}/${vacunaId}`)
         .expect(404);
 
-      expect(mockService.delete).toHaveBeenCalledWith(vacunaId);
+      expect(mockService.delete).toHaveBeenCalledWith(vacunaId, adminUser);
       expect(res.body).toEqual(notFoundBody(vacunaNotFound));
     });
 
@@ -255,7 +275,7 @@ describe('VacunasController (HTTP)', () => {
         .send(validPayload)
         .expect(404);
 
-      expect(mockService.create).toHaveBeenCalledWith(validPayload);
+      expect(mockService.create).toHaveBeenCalledWith(validPayload, adminUser);
       expect(res.body).toEqual(notFoundBody(mascotaNotFound));
     });
   });
@@ -383,7 +403,7 @@ describe('VacunasController (HTTP)', () => {
 
       await request(app.getHttpServer()).post(baseUrl).send(payload).expect(201);
 
-      expect(mockService.create).toHaveBeenCalledWith(payload);
+      expect(mockService.create).toHaveBeenCalledWith(payload, adminUser);
     });
 
     it('POST /vacunas accepts full ISO timestamps for the dates', async () => {
@@ -401,7 +421,7 @@ describe('VacunasController (HTTP)', () => {
 
       // The controller passes the ISO strings through untouched; conversion
       // to calendar dates happens in the service.
-      expect(mockService.create).toHaveBeenCalledWith(payload);
+      expect(mockService.create).toHaveBeenCalledWith(payload, adminUser);
     });
 
     it.each([
@@ -445,7 +465,7 @@ describe('VacunasController (HTTP)', () => {
         .send({})
         .expect(200);
 
-      expect(mockService.update).toHaveBeenCalledWith(vacunaId, {});
+      expect(mockService.update).toHaveBeenCalledWith(vacunaId, {}, adminUser);
     });
   });
 });

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "12c4b8d2-e655-4726-8c6c-457dcc83451e",
     "name": "PetCare API",
-    "description": "Colección de la PetCare API (NestJS + TypeORM + PostgreSQL).\n\n**Úsela solo contra una base de datos de desarrollo.** La API no tiene autenticación.\n\n## Orden recomendado\n1. **Usuarios → Crear usuario** (guarda `usuarioId`).\n2. **Mascotas → Crear mascota** del usuario de prueba (guarda `mascotaId`).\n3. **Crear** registros en Citas, Historias Clínicas, Alimentación, Vacunas y Medicamentos (guardan su id).\n4. **Consultar y actualizar** los registros creados (GET y PUT).\n5. **Opcional:** eliminar solo los registros de prueba.\n\nCon el Collection Runner, la colección completa sigue ese orden.\n\n## Eliminación\nLos DELETE se omiten mientras `permitirEliminacion` sea `false` (valor por defecto). Para eliminar los registros de prueba, cámbiela a `true` y ejecute los DELETE manualmente, de los registros dependientes hacia la mascota y el usuario. Eliminar una mascota o un usuario borra en cascada sus registros asociados. Las variables de id solo se rellenan con los registros que crea esta colección.\n\n## Variables\n- `baseUrl`: URL de la API (por defecto http://localhost:3000).\n- `usuarioPassword`: contraseña de muestra del usuario de prueba (no use contraseñas reales).\n- `usuarioId`, `mascotaId`, `citaId`, `historiaClinicaId`, `alimentacionId`, `vacunaId`, `medicamentoId`: se rellenan automáticamente con los POST.\n- `permitirEliminacion`: `false` por defecto.",
+    "description": "Colección de la PetCare API (NestJS + TypeORM + PostgreSQL + JWT).\n\n**Úsela solo contra una base de datos de desarrollo**, con datos ficticios.\n\n## Autenticación\n- La colección usa **Bearer Token** con `{{accessToken}}`. Todas las carpetas y peticiones lo **heredan**.\n- Las únicas peticiones públicas (`GET /`, `POST /auth/register`, `POST /auth/login`) usan **No Auth**.\n- **Autenticación → Iniciar sesión** guarda automáticamente `data.accessToken` en la variable `accessToken` del **entorno activo** (seleccione *PetCare Local*). Si no hay entorno activo, la guarda como variable de la colección y avisa en la consola.\n- El token caduca (por defecto en 1 hora, `JWT_EXPIRES_IN`). Si recibe 401, vuelva a iniciar sesión.\n\n## Orden recomendado\n1. **Estado de la API** (público).\n2. **Autenticación → Registrar usuario**: crea un usuario ficticio con rol `DUENO` (el correo se genera automáticamente y se guarda en `usuarioEmail`).\n3. **Autenticación → Iniciar sesión**: guarda `accessToken`, `usuarioId` y `usuarioRol`.\n4. **Autenticación → Perfil del usuario autenticado** (`GET /auth/me`).\n5. **Mascotas → Crear mascota**: sin `usuarioId`, se asigna al usuario autenticado (guarda `mascotaId`).\n6. **Crear, consultar y actualizar** en Citas, Historias Clínicas, Alimentación, Vacunas y Medicamentos.\n7. **Usuarios**: las peticiones marcadas **[SOLO ADMIN]** o **[ADMIN o VETERINARIO]** esperan 403 si el usuario autenticado es `DUENO`; sus pruebas se adaptan a `usuarioRol`.\n8. **Casos de error**: peticiones que demuestran 400, 401, 403 y 404 sin modificar datos.\n\nCon el Collection Runner puede ejecutar la colección completa en ese orden.\n\n## Permisos\n- `ADMIN`: acceso a todos los registros y a la gestión de usuarios.\n- `DUENO` y `VETERINARIO`: solo sus propias mascotas y los registros asociados a ellas. Lo ajeno responde 404. `VETERINARIO` además puede listar y consultar usuarios.\n- El registro público siempre crea usuarios `DUENO`; enviar `rol` o `estado` produce 400.\n\n## Eliminación (destructiva)\nLas peticiones **[DESTRUCTIVO]** se omiten mientras `permitirEliminacion` sea `false` (valor por defecto). Para eliminar registros de prueba, cámbiela a `true` y ejecute los DELETE **manualmente**, de los registros dependientes hacia la mascota. **Eliminar una mascota borra en cascada sus citas, historias clínicas, alimentación, vacunas y medicamentos; eliminar un usuario borra en cascada sus mascotas y todos esos registros.** Vuelva a poner `permitirEliminacion` en `false` al terminar.\n\n## Variables\n- Entorno: `baseUrl` y `accessToken` (vacío; lo rellena el inicio de sesión. No pegue tokens reales en archivos exportados).\n- Colección: `usuarioEmail`, `usuarioPassword` (contraseña ficticia de muestra), `usuarioId`, `usuarioRol`, `usuarioCreadoId`, `mascotaId`, `citaId`, `historiaClinicaId`, `alimentacionId`, `vacunaId`, `medicamentoId`, `permitirEliminacion`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -32,41 +32,265 @@
             ""
           ]
         },
-        "description": "Comprueba que el servidor está en ejecución."
+        "description": "Endpoint **público** (No Auth). Comprueba que el servidor está en ejecución.",
+        "auth": {
+          "type": "noauth"
+        }
       }
     },
     {
-      "name": "Usuarios",
-      "description": "Usuarios del sistema (DUENO, VETERINARIO o ADMIN). La contraseña se cifra con bcrypt y nunca se devuelve. El correo debe ser único (409 si ya existe). En este módulo el :id no se valida como UUID en la ruta. **Eliminar un usuario elimina en cascada sus mascotas y todos sus registros.**",
+      "name": "Autenticación",
+      "description": "Registro e inicio de sesión **públicos** (No Auth) y perfil del usuario autenticado (Bearer heredado). El registro público siempre asigna el rol `DUENO`.",
       "item": [
         {
-          "name": "Crear usuario",
+          "name": "Registrar usuario (público)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Correo ficticio y único para cada registro; lo usa \"Iniciar sesión\".",
+                  "const email = 'usuario.prueba.' + Date.now() + '@example.com';",
+                  "pm.collectionVariables.set('usuarioEmail', email);",
+                  "console.log('usuarioEmail = ' + email);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Usuario registrado con éxito');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "pm.test('El rol asignado es siempre DUENO', () => pm.expect(data.rol).to.eql('DUENO'));",
+                  "pm.test('Cuenta activa', () => pm.expect(data.estado).to.eql(true));",
+                  "pm.test('La respuesta no incluye la contraseña', () => pm.expect(data).to.not.have.property('password'));",
+                  "if (pm.response.code === 201 && data.id) {",
+                  "  pm.collectionVariables.set('usuarioId', data.id);",
+                  "  // Usuario nuevo: los ids de registros de otro usuario ya no aplican.",
+                  "  [\"mascotaId\",\"citaId\",\"historiaClinicaId\",\"alimentacionId\",\"vacunaId\",\"medicamentoId\"].forEach((k) => pm.collectionVariables.set(k, ''));",
+                  "  console.log('usuarioId = ' + data.id + ' (ahora ejecute \"Iniciar sesión\")');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Usuario de Prueba PetCare\",\n  \"email\": \"{{usuarioEmail}}\",\n  \"password\": \"{{usuarioPassword}}\",\n  \"telefono\": \"3000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Registra un usuario ficticio con rol `DUENO`. El script previo genera un correo único `usuario.prueba.<marca de tiempo>@example.com` y lo guarda en `usuarioEmail` para el inicio de sesión. No envíe `rol` ni `estado`: la API responde 400. 409 si el correo ya existe."
+          }
+        },
+        {
+          "name": "Iniciar sesión (público, guarda el token)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('usuarioEmail')) {",
+                  "  console.warn('usuarioEmail está vacío: ejecute antes \"Registrar usuario\" o escriba el correo de una cuenta existente.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Respuesta con { message, data }', () => {",
+                  "  pm.expect(body).to.be.an('object');",
+                  "  pm.expect(body.message).to.eql('Inicio de sesión exitoso');",
+                  "  pm.expect(body.data).to.be.an('object');",
+                  "});",
+                  "const data = body.data || {};",
+                  "const usuario = data.usuario || {};",
+                  "pm.test('Devuelve un accessToken JWT de tipo Bearer', () => {",
+                  "  pm.expect(data.accessToken).to.be.a('string').and.not.empty;",
+                  "  pm.expect(data.accessToken.split('.')).to.have.lengthOf(3);",
+                  "  pm.expect(data.tokenType).to.eql('Bearer');",
+                  "});",
+                  "pm.test('El usuario no incluye la contraseña', () => pm.expect(usuario).to.not.have.property('password'));",
+                  "",
+                  "if (pm.response.code === 200 && data.accessToken) {",
+                  "  // Guarda el token en el entorno activo (nunca se imprime en la consola).",
+                  "  if (pm.environment.name) {",
+                  "    pm.environment.set('accessToken', data.accessToken);",
+                  "    console.log('accessToken guardado en el entorno \"' + pm.environment.name + '\".');",
+                  "  } else {",
+                  "    pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "    console.warn('No hay un entorno activo: accessToken se guardó como variable de la colección. Seleccione \"PetCare Local\" para usar el entorno.');",
+                  "  }",
+                  "  const anterior = pm.collectionVariables.get('usuarioId');",
+                  "  if (anterior && anterior !== usuario.id) {",
+                  "    // Otro usuario: los ids de registros del usuario anterior ya no aplican.",
+                  "  [\"mascotaId\",\"citaId\",\"historiaClinicaId\",\"alimentacionId\",\"vacunaId\",\"medicamentoId\"].forEach((k) => pm.collectionVariables.set(k, ''));",
+                  "    console.log('Usuario distinto al anterior: se limpiaron los ids de mascotas y registros.');",
+                  "  }",
+                  "  pm.collectionVariables.set('usuarioId', usuario.id);",
+                  "  pm.collectionVariables.set('usuarioRol', usuario.rol);",
+                  "  console.log('usuarioId = ' + usuario.id + ', usuarioRol = ' + usuario.rol);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{usuarioEmail}}\",\n  \"password\": \"{{usuarioPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicia sesión con `usuarioEmail` y `usuarioPassword`. El script de pruebas toma `data.accessToken` de la respuesta y lo guarda en la variable `accessToken` del **entorno activo**; las peticiones protegidas lo envían como `Authorization: Bearer {{accessToken}}`. También guarda `usuarioId` y `usuarioRol`. 401 `Credenciales inválidas` si el correo no existe, la contraseña es incorrecta o la cuenta está inactiva.\n\nPara usar una cuenta existente (por ejemplo, un ADMIN de desarrollo), cambie `usuarioEmail` y `usuarioPassword` antes de enviar."
+          }
+        },
+        {
+          "name": "Perfil del usuario autenticado",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "",
-                  "pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('Respuesta con { message, data }', () => {",
                   "  pm.expect(body).to.be.an('object');",
-                  "  pm.expect(body.message).to.eql('Usuario creado con éxito');",
+                  "  pm.expect(body.message).to.eql('Perfil del usuario autenticado');",
                   "  pm.expect(body.data).to.be.an('object');",
                   "});",
                   "const data = body.data || {};",
-                  "pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
-                  "pm.test('Campo nombre guardado', () => pm.expect(data.nombre).to.eql(\"Usuario de Prueba PetCare\"));",
-                  "pm.test('Campo telefono guardado', () => pm.expect(data.telefono).to.eql(\"3000000000\"));",
-                  "pm.test('Campo rol guardado', () => pm.expect(data.rol).to.eql(\"DUENO\"));",
-                  "pm.test('Campo estado guardado', () => pm.expect(data.estado).to.eql(true));",
-                  "",
-                  "",
+                  "const id = pm.collectionVariables.get('usuarioId');",
+                  "if (id) {",
+                  "  pm.test('Es el usuario que inició sesión', () => pm.expect(data.id).to.eql(id));",
+                  "}",
                   "pm.test('La respuesta no incluye la contraseña', () => pm.expect(data).to.not.have.property('password'));",
-                  "if (pm.response.code === 201 && data.id) {",
-                  "  pm.collectionVariables.set('usuarioId', data.id);",
-                  "  console.log('usuarioId = ' + data.id);",
+                  "if (pm.response.code === 200 && data.rol) {",
+                  "  // El rol se recarga desde la base de datos en cada petición.",
+                  "  pm.collectionVariables.set('usuarioRol', data.rol);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Requiere token (Bearer heredado de la colección). Devuelve el usuario autenticado sin contraseña. 401 si el token falta, es inválido o expiró."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Usuarios",
+      "description": "Gestión de usuarios. **Requiere token.** Permisos:\n- Listar: ADMIN o VETERINARIO (DUENO: 403).\n- Obtener por id: ADMIN o VETERINARIO, o el propio usuario (DUENO consultando a otro: 403).\n- Crear con cualquier rol: solo ADMIN (los dueños se registran con `POST /auth/register`).\n- Actualizar: ADMIN a cualquiera; los demás solo a sí mismos y sin cambiar `rol` ni `estado` (403).\n- Eliminar: solo ADMIN.\n\nLas pruebas de las peticiones restringidas se adaptan a `usuarioRol`: esperan 403 para roles sin permiso. La contraseña nunca se devuelve. El correo debe ser único (409). En este módulo el `:id` no se valida como UUID en la ruta. **Eliminar un usuario elimina en cascada sus mascotas y todos sus registros.**",
+      "item": [
+        {
+          "name": "Crear usuario [SOLO ADMIN]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rol = pm.collectionVariables.get('usuarioRol');",
+                  "const autorizado = [\"ADMIN\"].includes(rol);",
+                  "if (!autorizado) {",
+                  "  pm.test('Código 403 para el rol ' + rol + ' (solo ADMIN)', () => pm.response.to.have.status(403));",
+                  "  pm.test('Mensaje de permisos insuficientes', () => pm.expect(pm.response.json().message).to.eql('No tienes permisos para realizar esta acción'));",
+                  "} else {",
+                  "  pm.test('Código 201', () => pm.response.to.have.status(201));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Respuesta con { message, data }', () => {",
+                  "    pm.expect(body).to.be.an('object');",
+                  "    pm.expect(body.message).to.eql('Usuario creado con éxito');",
+                  "    pm.expect(body.data).to.be.an('object');",
+                  "  });",
+                  "  const data = body.data || {};",
+                  "  pm.test('Devuelve un id UUID', () => pm.expect(data.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i));",
+                  "  pm.test('Campo nombre guardado', () => pm.expect(data.nombre).to.eql(\"Veterinario de Prueba PetCare\"));",
+                  "  pm.test('Campo telefono guardado', () => pm.expect(data.telefono).to.eql(\"3000000001\"));",
+                  "  pm.test('Campo rol guardado', () => pm.expect(data.rol).to.eql(\"VETERINARIO\"));",
+                  "  pm.test('Campo estado guardado', () => pm.expect(data.estado).to.eql(true));",
+                  "  pm.test('La respuesta no incluye la contraseña', () => pm.expect(data).to.not.have.property('password'));",
+                  "  if (pm.response.code === 201 && data.id) {",
+                  "    pm.collectionVariables.set('usuarioCreadoId', data.id);",
+                  "    console.log('usuarioCreadoId = ' + data.id);",
+                  "  }",
                   "}"
                 ]
               }
@@ -82,7 +306,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Usuario de Prueba PetCare\",\n  \"email\": \"usuario.prueba.{{$timestamp}}@example.com\",\n  \"password\": \"{{usuarioPassword}}\",\n  \"telefono\": \"3000000000\",\n  \"rol\": \"DUENO\",\n  \"estado\": true\n}",
+              "raw": "{\n  \"nombre\": \"Veterinario de Prueba PetCare\",\n  \"email\": \"veterinario.prueba.{{$timestamp}}@example.com\",\n  \"password\": \"{{usuarioPassword}}\",\n  \"telefono\": \"3000000001\",\n  \"rol\": \"VETERINARIO\",\n  \"estado\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -98,30 +322,36 @@
                 "usuarios"
               ]
             },
-            "description": "Crea un registro de prueba y guarda su id en la variable `usuarioId`."
+            "description": "**Solo ADMIN.** Crea un usuario ficticio con cualquier rol (aquí `VETERINARIO`) y guarda su id en `usuarioCreadoId`. Con un usuario `DUENO` o `VETERINARIO` la API responde 403 y no crea nada."
           }
         },
         {
-          "name": "Listar usuarios",
+          "name": "Listar usuarios [ADMIN o VETERINARIO]",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
-                  "const id = pm.collectionVariables.get('usuarioId');",
-                  "if (id) {",
-                  "  pm.test('Incluye el registro de prueba', () => {",
-                  "    pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "const rol = pm.collectionVariables.get('usuarioRol');",
+                  "const autorizado = [\"ADMIN\",\"VETERINARIO\"].includes(rol);",
+                  "if (!autorizado) {",
+                  "  pm.test('Código 403 para el rol ' + rol + ' (solo ADMIN y VETERINARIO)', () => pm.response.to.have.status(403));",
+                  "  pm.test('Mensaje de permisos insuficientes', () => pm.expect(pm.response.json().message).to.eql('No tienes permisos para realizar esta acción'));",
+                  "} else {",
+                  "  pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Respuesta es un arreglo', () => pm.expect(body).to.be.an('array'));",
+                  "  const id = pm.collectionVariables.get('usuarioId');",
+                  "  if (id) {",
+                  "    pm.test('Incluye al usuario autenticado', () => {",
+                  "      pm.expect(body.some((r) => r.id === id)).to.be.true;",
+                  "    });",
+                  "  }",
+                  "  pm.test('Ningún usuario incluye contraseña', () => {",
+                  "    body.forEach((u) => pm.expect(u).to.not.have.property('password'));",
                   "  });",
-                  "}",
-                  "",
-                  "pm.test('Ningún usuario incluye contraseña', () => {",
-                  "  body.forEach((u) => pm.expect(u).to.not.have.property('password'));",
-                  "});"
+                  "}"
                 ]
               }
             }
@@ -138,23 +368,21 @@
                 "usuarios"
               ]
             },
-            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+            "description": "**ADMIN o VETERINARIO.** Lista todos los usuarios sin contraseñas. Respuesta: arreglo JSON. Con un usuario `DUENO` la API responde 403."
           }
         },
         {
-          "name": "Obtener usuario por ID",
+          "name": "Obtener usuario por ID (propio)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "",
                   "const id = pm.collectionVariables.get('usuarioId');",
-                  "pm.test('usuarioId está definido (ejecute antes \"Crear usuario\")', () => {",
+                  "pm.test('usuarioId está definido (ejecute antes \"Iniciar sesión\")', () => {",
                   "  pm.expect(id, 'usuarioId vacío').to.be.a('string').and.not.empty;",
                   "});",
-                  "",
                   "pm.test('Código 200', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('Respuesta con { message, data }', () => {",
@@ -164,7 +392,6 @@
                   "});",
                   "const data = body.data || {};",
                   "pm.test('Devuelve el registro solicitado', () => pm.expect(data.id).to.eql(id));",
-                  "",
                   "pm.test('Incluye sus mascotas y no la contraseña', () => {",
                   "  pm.expect(data).to.not.have.property('password');",
                   "  pm.expect(data.mascotas).to.be.an('array');",
@@ -186,23 +413,21 @@
                 "{{usuarioId}}"
               ]
             },
-            "description": "Obtiene el registro `usuarioId`. Respuesta: `{ message, data }`; 404 si no existe."
+            "description": "Obtiene el usuario autenticado (`usuarioId`) con sus mascotas. Respuesta: `{ message, data }`. Cualquier rol puede consultarse a sí mismo; ADMIN y VETERINARIO pueden consultar a cualquiera. DUENO consultando a otro usuario: 403. 404 si no existe."
           }
         },
         {
-          "name": "Actualizar usuario",
+          "name": "Actualizar usuario (propio)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "",
                   "const id = pm.collectionVariables.get('usuarioId');",
-                  "pm.test('usuarioId está definido (ejecute antes \"Crear usuario\")', () => {",
+                  "pm.test('usuarioId está definido (ejecute antes \"Iniciar sesión\")', () => {",
                   "  pm.expect(id, 'usuarioId vacío').to.be.a('string').and.not.empty;",
                   "});",
-                  "",
                   "pm.test('Código 200', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
                   "pm.test('Respuesta con { message, data }', () => {",
@@ -213,7 +438,7 @@
                   "const data = body.data || {};",
                   "pm.test('Devuelve el registro actualizado', () => pm.expect(data.id).to.eql(id));",
                   "pm.test('Campo telefono guardado', () => pm.expect(data.telefono).to.eql(\"3001112233\"));",
-                  "pm.test('Campo rol guardado', () => pm.expect(data.rol).to.eql(\"VETERINARIO\"));"
+                  "pm.test('El rol no cambia', () => pm.expect(data.rol).to.eql(pm.collectionVariables.get('usuarioRol')));"
                 ]
               }
             }
@@ -228,7 +453,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"telefono\": \"3001112233\",\n  \"rol\": \"VETERINARIO\"\n}",
+              "raw": "{\n  \"telefono\": \"3001112233\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -245,11 +470,11 @@
                 "{{usuarioId}}"
               ]
             },
-            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+            "description": "Actualización parcial del usuario autenticado (`usuarioId`): solo se modifican los campos enviados. Los usuarios no ADMIN solo pueden modificarse a sí mismos y **no** pueden enviar `rol` ni `estado` (403). Si incluye `password`, se vuelve a cifrar. 409 si el nuevo correo ya existe."
           }
         },
         {
-          "name": "Eliminar usuario (manual)",
+          "name": "[DESTRUCTIVO][SOLO ADMIN] Eliminar usuario creado (manual)",
           "event": [
             {
               "listen": "prerequest",
@@ -257,13 +482,18 @@
                 "type": "text/javascript",
                 "exec": [
                   "// Protección: los DELETE solo se envían si permitirEliminacion es \"true\".",
-                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
-                  "  console.warn('DELETE omitido: cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "const omitir = (motivo) => {",
+                  "  console.warn('DELETE omitido: ' + motivo);",
                   "  if (pm.execution && typeof pm.execution.skipRequest === 'function') {",
                   "    pm.execution.skipRequest();",
                   "  } else {",
-                  "    throw new Error('Eliminación deshabilitada: cambie permitirEliminacion a \"true\".');",
+                  "    throw new Error('Eliminación omitida: ' + motivo);",
                   "  }",
+                  "};",
+                  "if (pm.collectionVariables.get('permitirEliminacion') !== 'true') {",
+                  "  omitir('cambie permitirEliminacion a \"true\" para eliminar el registro de prueba.');",
+                  "} else if (!pm.collectionVariables.get('usuarioCreadoId')) {",
+                  "  omitir('usuarioCreadoId está vacío (ejecute antes \"Crear usuario [SOLO ADMIN]\" como ADMIN).');",
                   "}"
                 ]
               }
@@ -273,11 +503,18 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Código 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Usuario eliminado con éxito'));",
-                  "if (pm.response.code === 200) {",
-                  "  pm.collectionVariables.set('usuarioId', '');",
+                  "const rol = pm.collectionVariables.get('usuarioRol');",
+                  "const autorizado = [\"ADMIN\"].includes(rol);",
+                  "if (!autorizado) {",
+                  "  pm.test('Código 403 para el rol ' + rol + ' (solo ADMIN)', () => pm.response.to.have.status(403));",
+                  "  pm.test('Mensaje de permisos insuficientes', () => pm.expect(pm.response.json().message).to.eql('No tienes permisos para realizar esta acción'));",
+                  "} else {",
+                  "  pm.test('Código 200', () => pm.response.to.have.status(200));",
+                  "  const body = pm.response.json();",
+                  "  pm.test('Respuesta con { message }', () => pm.expect(body.message).to.eql('Usuario eliminado con éxito'));",
+                  "  if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('usuarioCreadoId', '');",
+                  "  }",
                   "}"
                 ]
               }
@@ -287,23 +524,23 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/usuarios/{{usuarioId}}",
+              "raw": "{{baseUrl}}/usuarios/{{usuarioCreadoId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "usuarios",
-                "{{usuarioId}}"
+                "{{usuarioCreadoId}}"
               ]
             },
-            "description": "Elimina el registro de prueba `usuarioId`. **Solo se envía si la variable `permitirEliminacion` es `true`.** Atención: elimina en cascada los registros asociados."
+            "description": "**Destructivo y solo ADMIN.** Elimina el usuario de prueba creado con \"Crear usuario [SOLO ADMIN]\" (`usuarioCreadoId`), nunca al usuario autenticado. **Solo se envía si `permitirEliminacion` es `true` y `usuarioCreadoId` tiene valor.** Atención: elimina en cascada sus mascotas y todos los registros asociados. Con un usuario no ADMIN la API responde 403."
           }
         }
       ]
     },
     {
       "name": "Mascotas",
-      "description": "Mascotas asociadas a un usuario existente (usuarioId). Especies: PERRO, GATO, AVE, OTRO. En este módulo el :id no se valida como UUID en la ruta. **Eliminar una mascota elimina en cascada sus citas, historias clínicas, alimentación, vacunas y medicamentos.**",
+      "description": "Mascotas. **Requiere token.** ADMIN ve y gestiona todas; DUENO y VETERINARIO solo las suyas (las ajenas responden 404, como si no existieran). Al crear, `usuarioId` es **opcional**: si se omite, la mascota se asigna al usuario autenticado; solo ADMIN puede indicar otro dueño (403 para los demás) o transferirla con `PUT`. Especies: PERRO, GATO, AVE, OTRO. El `:id` se valida como UUID (400 si está mal formado). **Eliminar una mascota elimina en cascada sus citas, historias clínicas, alimentación, vacunas y medicamentos.**",
       "item": [
         {
           "name": "Crear mascota",
@@ -313,8 +550,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "if (!pm.collectionVariables.get('usuarioId')) {",
-                  "  console.warn('usuarioId está vacío: cree primero el registro del que depende.');",
+                  "if (!pm.variables.get('accessToken')) {",
+                  "  console.warn('accessToken está vacío: ejecute antes \"Autenticación → Iniciar sesión\".');",
                   "}"
                 ]
               }
@@ -339,7 +576,7 @@
                   "pm.test('Campo peso guardado', () => pm.expect(data.peso).to.eql(12.5));",
                   "",
                   "",
-                  "pm.test('Asociada al usuario de prueba', () => pm.expect(data.usuarioId).to.eql(pm.collectionVariables.get('usuarioId')));",
+                  "pm.test('Asociada al usuario autenticado', () => pm.expect(data.usuarioId).to.eql(pm.collectionVariables.get('usuarioId')));",
                   "if (pm.response.code === 201 && data.id) {",
                   "  pm.collectionVariables.set('mascotaId', data.id);",
                   "  console.log('mascotaId = ' + data.id);",
@@ -358,7 +595,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"usuarioId\": \"{{usuarioId}}\",\n  \"nombre\": \"Mascota de Prueba\",\n  \"especie\": \"PERRO\",\n  \"raza\": \"Criollo\",\n  \"fecha_nacimiento\": \"2022-03-15\",\n  \"peso\": 12.5,\n  \"fotoUrl\": \"https://example.com/foto-mascota-prueba.jpg\",\n  \"estado\": true\n}",
+              "raw": "{\n  \"nombre\": \"Mascota de Prueba\",\n  \"especie\": \"PERRO\",\n  \"raza\": \"Criollo\",\n  \"fecha_nacimiento\": \"2022-03-15\",\n  \"peso\": 12.5,\n  \"fotoUrl\": \"https://example.com/foto-mascota-prueba.jpg\",\n  \"estado\": true\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -374,7 +611,7 @@
                 "mascotas"
               ]
             },
-            "description": "Crea un registro de prueba y guarda su id en la variable `mascotaId`. Requiere `usuarioId`."
+            "description": "Crea una mascota de prueba **a nombre del usuario autenticado** (sin `usuarioId` en el cuerpo) y guarda su id en `mascotaId`. Requiere haber iniciado sesión. Un ADMIN puede añadir `\"usuarioId\": \"<uuid>\"` para registrarla a nombre de otro usuario existente."
           }
         },
         {
@@ -410,7 +647,7 @@
                 "mascotas"
               ]
             },
-            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+            "description": "Lista las mascotas accesibles: todas para ADMIN, solo las propias para DUENO y VETERINARIO. Respuesta: arreglo JSON."
           }
         },
         {
@@ -458,7 +695,7 @@
                 "{{mascotaId}}"
               ]
             },
-            "description": "Obtiene el registro `mascotaId`. Respuesta: `{ message, data }`; 404 si no existe."
+            "description": "Obtiene la mascota `mascotaId` con su usuario dueño (sin contraseña). Respuesta: `{ message, data }`; 404 si no existe o pertenece a otro usuario."
           }
         },
         {
@@ -516,11 +753,11 @@
                 "{{mascotaId}}"
               ]
             },
-            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si la mascota no existe o es ajena. Solo ADMIN puede cambiar `usuarioId` (transferir la mascota); los demás reciben 403."
           }
         },
         {
-          "name": "Eliminar mascota (manual)",
+          "name": "[DESTRUCTIVO] Eliminar mascota (manual)",
           "event": [
             {
               "listen": "prerequest",
@@ -567,14 +804,14 @@
                 "{{mascotaId}}"
               ]
             },
-            "description": "Elimina el registro de prueba `mascotaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.** Atención: elimina en cascada los registros asociados."
+            "description": "Elimina el registro de prueba `mascotaId`. **Destructivo: solo se envía si la variable `permitirEliminacion` es `true`.** Ejecútelo manualmente. 404 si no existe o es ajeno. Atención: elimina en cascada sus citas, historias clínicas, alimentación, vacunas y medicamentos."
           }
         }
       ]
     },
     {
       "name": "Citas",
-      "description": "Citas veterinarias de una mascota. Estados: PROGRAMADA (por defecto), REALIZADA, CANCELADA, REPROGRAMADA. El :id se valida como UUID (400 si está mal formado).",
+      "description": "Citas veterinarias de una mascota. Estados: PROGRAMADA (por defecto), REALIZADA, CANCELADA, REPROGRAMADA. El :id se valida como UUID (400 si está mal formado). **Requiere token.** ADMIN ve y gestiona todos los registros; DUENO y VETERINARIO solo los de sus propias mascotas (lo ajeno responde 404). Al crear, la mascota indicada debe pertenecer al usuario autenticado (404 si no existe o es ajena). `PUT` no permite cambiar `id` ni la mascota (400).",
       "item": [
         {
           "name": "Crear cita",
@@ -680,7 +917,7 @@
                 "citas"
               ]
             },
-            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+            "description": "Lista los registros accesibles: todos para ADMIN, solo los de mascotas propias para los demás roles. Respuesta: arreglo JSON."
           }
         },
         {
@@ -723,7 +960,7 @@
                 "{{citaId}}"
               ]
             },
-            "description": "Obtiene el registro `citaId`. Respuesta: `{ message, data }`; 404 si no existe."
+            "description": "Obtiene el registro `citaId`. Respuesta: `{ message, data }`; 404 si no existe o pertenece a una mascota ajena."
           }
         },
         {
@@ -781,11 +1018,11 @@
                 "{{citaId}}"
               ]
             },
-            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe o pertenece a una mascota ajena."
           }
         },
         {
-          "name": "Eliminar cita (manual)",
+          "name": "[DESTRUCTIVO] Eliminar cita (manual)",
           "event": [
             {
               "listen": "prerequest",
@@ -832,14 +1069,14 @@
                 "{{citaId}}"
               ]
             },
-            "description": "Elimina el registro de prueba `citaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+            "description": "Elimina el registro de prueba `citaId`. **Destructivo: solo se envía si la variable `permitirEliminacion` es `true`.** Ejecútelo manualmente. 404 si no existe o es ajeno."
           }
         }
       ]
     },
     {
       "name": "Historias Clínicas",
-      "description": "Historias clínicas (consultas) de una mascota. El :id se valida como UUID (400 si está mal formado).",
+      "description": "Historias clínicas (consultas) de una mascota. El :id se valida como UUID (400 si está mal formado). **Requiere token.** ADMIN ve y gestiona todos los registros; DUENO y VETERINARIO solo los de sus propias mascotas (lo ajeno responde 404). Al crear, la mascota indicada debe pertenecer al usuario autenticado (404 si no existe o es ajena). `PUT` no permite cambiar `id` ni la mascota (400).",
       "item": [
         {
           "name": "Crear historia clínica",
@@ -945,7 +1182,7 @@
                 "historias-clinicas"
               ]
             },
-            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+            "description": "Lista los registros accesibles: todos para ADMIN, solo los de mascotas propias para los demás roles. Respuesta: arreglo JSON."
           }
         },
         {
@@ -988,7 +1225,7 @@
                 "{{historiaClinicaId}}"
               ]
             },
-            "description": "Obtiene el registro `historiaClinicaId`. Respuesta: `{ message, data }`; 404 si no existe."
+            "description": "Obtiene el registro `historiaClinicaId`. Respuesta: `{ message, data }`; 404 si no existe o pertenece a una mascota ajena."
           }
         },
         {
@@ -1046,11 +1283,11 @@
                 "{{historiaClinicaId}}"
               ]
             },
-            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe o pertenece a una mascota ajena."
           }
         },
         {
-          "name": "Eliminar historia clínica (manual)",
+          "name": "[DESTRUCTIVO] Eliminar historia clínica (manual)",
           "event": [
             {
               "listen": "prerequest",
@@ -1097,14 +1334,14 @@
                 "{{historiaClinicaId}}"
               ]
             },
-            "description": "Elimina el registro de prueba `historiaClinicaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+            "description": "Elimina el registro de prueba `historiaClinicaId`. **Destructivo: solo se envía si la variable `permitirEliminacion` es `true`.** Ejecútelo manualmente. 404 si no existe o es ajeno."
           }
         }
       ]
     },
     {
       "name": "Alimentación",
-      "description": "Planes de alimentación de una mascota. Ruta: /alimentaciones. El :id se valida como UUID (400 si está mal formado).",
+      "description": "Planes de alimentación de una mascota. Ruta: /alimentaciones. El :id se valida como UUID (400 si está mal formado). **Requiere token.** ADMIN ve y gestiona todos los registros; DUENO y VETERINARIO solo los de sus propias mascotas (lo ajeno responde 404). Al crear, la mascota indicada debe pertenecer al usuario autenticado (404 si no existe o es ajena). `PUT` no permite cambiar `id` ni la mascota (400).",
       "item": [
         {
           "name": "Crear alimentación",
@@ -1210,7 +1447,7 @@
                 "alimentaciones"
               ]
             },
-            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+            "description": "Lista los registros accesibles: todos para ADMIN, solo los de mascotas propias para los demás roles. Respuesta: arreglo JSON."
           }
         },
         {
@@ -1253,7 +1490,7 @@
                 "{{alimentacionId}}"
               ]
             },
-            "description": "Obtiene el registro `alimentacionId`. Respuesta: `{ message, data }`; 404 si no existe."
+            "description": "Obtiene el registro `alimentacionId`. Respuesta: `{ message, data }`; 404 si no existe o pertenece a una mascota ajena."
           }
         },
         {
@@ -1311,11 +1548,11 @@
                 "{{alimentacionId}}"
               ]
             },
-            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe o pertenece a una mascota ajena."
           }
         },
         {
-          "name": "Eliminar alimentación (manual)",
+          "name": "[DESTRUCTIVO] Eliminar alimentación (manual)",
           "event": [
             {
               "listen": "prerequest",
@@ -1362,14 +1599,14 @@
                 "{{alimentacionId}}"
               ]
             },
-            "description": "Elimina el registro de prueba `alimentacionId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+            "description": "Elimina el registro de prueba `alimentacionId`. **Destructivo: solo se envía si la variable `permitirEliminacion` es `true`.** Ejecútelo manualmente. 404 si no existe o es ajeno."
           }
         }
       ]
     },
     {
       "name": "Vacunas",
-      "description": "Vacunas aplicadas a una mascota. **La mascota se indica con `mascota_id` (guion bajo).** Fechas en formato YYYY-MM-DD. El :id se valida como UUID (400 si está mal formado).",
+      "description": "Vacunas aplicadas a una mascota. **La mascota se indica con `mascota_id` (guion bajo).** Fechas en formato YYYY-MM-DD. El :id se valida como UUID (400 si está mal formado). **Requiere token.** ADMIN ve y gestiona todos los registros; DUENO y VETERINARIO solo los de sus propias mascotas (lo ajeno responde 404). Al crear, la mascota indicada debe pertenecer al usuario autenticado (404 si no existe o es ajena). `PUT` no permite cambiar `id` ni la mascota (400).",
       "item": [
         {
           "name": "Crear vacuna",
@@ -1474,7 +1711,7 @@
                 "vacunas"
               ]
             },
-            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+            "description": "Lista los registros accesibles: todos para ADMIN, solo los de mascotas propias para los demás roles. Respuesta: arreglo JSON."
           }
         },
         {
@@ -1522,7 +1759,7 @@
                 "{{vacunaId}}"
               ]
             },
-            "description": "Obtiene el registro `vacunaId`. Respuesta: `{ message, data }`; 404 si no existe."
+            "description": "Obtiene el registro `vacunaId`. Respuesta: `{ message, data }`; 404 si no existe o pertenece a una mascota ajena."
           }
         },
         {
@@ -1580,11 +1817,11 @@
                 "{{vacunaId}}"
               ]
             },
-            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe o pertenece a una mascota ajena."
           }
         },
         {
-          "name": "Eliminar vacuna (manual)",
+          "name": "[DESTRUCTIVO] Eliminar vacuna (manual)",
           "event": [
             {
               "listen": "prerequest",
@@ -1631,14 +1868,14 @@
                 "{{vacunaId}}"
               ]
             },
-            "description": "Elimina el registro de prueba `vacunaId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+            "description": "Elimina el registro de prueba `vacunaId`. **Destructivo: solo se envía si la variable `permitirEliminacion` es `true`.** Ejecútelo manualmente. 404 si no existe o es ajeno."
           }
         }
       ]
     },
     {
       "name": "Medicamentos",
-      "description": "Tratamientos con medicamentos de una mascota. Fechas `inicio` y `fin` en formato YYYY-MM-DD; `estado` es booleano (por defecto true). El :id se valida como UUID (400 si está mal formado).",
+      "description": "Tratamientos con medicamentos de una mascota. Fechas `inicio` y `fin` en formato YYYY-MM-DD; `estado` es booleano (por defecto true). El :id se valida como UUID (400 si está mal formado). **Requiere token.** ADMIN ve y gestiona todos los registros; DUENO y VETERINARIO solo los de sus propias mascotas (lo ajeno responde 404). Al crear, la mascota indicada debe pertenecer al usuario autenticado (404 si no existe o es ajena). `PUT` no permite cambiar `id` ni la mascota (400).",
       "item": [
         {
           "name": "Crear medicamento",
@@ -1744,7 +1981,7 @@
                 "medicamentos"
               ]
             },
-            "description": "Lista todos los registros. Respuesta: arreglo JSON."
+            "description": "Lista los registros accesibles: todos para ADMIN, solo los de mascotas propias para los demás roles. Respuesta: arreglo JSON."
           }
         },
         {
@@ -1792,7 +2029,7 @@
                 "{{medicamentoId}}"
               ]
             },
-            "description": "Obtiene el registro `medicamentoId`. Respuesta: `{ message, data }`; 404 si no existe."
+            "description": "Obtiene el registro `medicamentoId`. Respuesta: `{ message, data }`; 404 si no existe o pertenece a una mascota ajena."
           }
         },
         {
@@ -1850,11 +2087,11 @@
                 "{{medicamentoId}}"
               ]
             },
-            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe."
+            "description": "Actualización parcial: solo se modifican los campos enviados. 404 si el registro no existe o pertenece a una mascota ajena."
           }
         },
         {
-          "name": "Eliminar medicamento (manual)",
+          "name": "[DESTRUCTIVO] Eliminar medicamento (manual)",
           "event": [
             {
               "listen": "prerequest",
@@ -1901,7 +2138,291 @@
                 "{{medicamentoId}}"
               ]
             },
-            "description": "Elimina el registro de prueba `medicamentoId`. **Solo se envía si la variable `permitirEliminacion` es `true`.**"
+            "description": "Elimina el registro de prueba `medicamentoId`. **Destructivo: solo se envía si la variable `permitirEliminacion` es `true`.** Ejecútelo manualmente. 404 si no existe o es ajeno."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Casos de error (no modifican datos)",
+      "description": "Peticiones que demuestran los códigos de error reales de la API. Ninguna crea, modifica ni elimina datos: la API las rechaza antes de escribir. Ejecútelas después de iniciar sesión.",
+      "item": [
+        {
+          "name": "401 - Perfil sin token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Mensaje del guard JWT', () => pm.expect(pm.response.json().message).to.eql('Token de acceso inválido, expirado o ausente'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Ruta protegida enviada **sin** token (No Auth): 401."
+          }
+        },
+        {
+          "name": "400 - Registro público con rol ADMIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Rechaza la propiedad rol', () => pm.expect(pm.response.json().message).to.include('property rol should not exist'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Intento de Escalada\",\n  \"email\": \"intento.admin.{{$timestamp}}@example.com\",\n  \"password\": \"{{usuarioPassword}}\",\n  \"telefono\": \"3000000002\",\n  \"rol\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "El registro público nunca asigna roles elevados: enviar `rol` (o `estado`) produce 400 y no se crea el usuario."
+          }
+        },
+        {
+          "name": "401 - Inicio de sesión con contraseña incorrecta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Mensaje genérico', () => pm.expect(pm.response.json().message).to.eql('Credenciales inválidas'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{usuarioEmail}}\",\n  \"password\": \"ContrasenaIncorrecta999\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Credenciales incorrectas: 401 con el mensaje genérico `Credenciales inválidas`. No modifica `accessToken`."
+          }
+        },
+        {
+          "name": "400 - Mascota con id mal formado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Mensaje de UUID inválido', () => pm.expect(pm.response.json().message).to.eql('Validation failed (uuid is expected)'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mascotas/no-es-un-uuid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas",
+                "no-es-un-uuid"
+              ]
+            },
+            "description": "El `:id` se valida con `ParseUUIDPipe`: 400 sin consultar la base de datos."
+          }
+        },
+        {
+          "name": "404 - Mascota inexistente o ajena",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Mensaje de no encontrada', () => pm.expect(pm.response.json().message).to.eql('Mascota con ID 00000000-0000-4000-8000-000000000000 no encontrada'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/mascotas/00000000-0000-4000-8000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas",
+                "00000000-0000-4000-8000-000000000000"
+              ]
+            },
+            "description": "Un id que no existe (o que pertenece a otro usuario, para roles no ADMIN) responde 404."
+          }
+        },
+        {
+          "name": "403 - Registrar mascota a nombre de otro usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const rol = pm.collectionVariables.get('usuarioRol');",
+                  "if (rol === 'ADMIN') {",
+                  "  pm.test('ADMIN: 404 porque el usuario indicado no existe', () => pm.response.to.have.status(404));",
+                  "} else {",
+                  "  pm.test('Código 403 para el rol ' + rol, () => pm.response.to.have.status(403));",
+                  "  pm.test('Mensaje de propiedad', () => pm.expect(pm.response.json().message).to.eql('Solo puedes registrar mascotas a tu nombre'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuarioId\": \"00000000-0000-4000-8000-000000000000\",\n  \"nombre\": \"Mascota Ajena\",\n  \"especie\": \"GATO\",\n  \"raza\": \"Criollo\",\n  \"fecha_nacimiento\": \"2023-05-20\",\n  \"peso\": 4.2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/mascotas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "mascotas"
+              ]
+            },
+            "description": "Un usuario no ADMIN no puede indicar un `usuarioId` distinto del suyo: 403. Para un ADMIN el usuario indicado no existe, así que responde 404. En ningún caso se crea la mascota."
+          }
+        },
+        {
+          "name": "400 - Vacuna con mascotaId en lugar de mascota_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Código 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Rechaza la propiedad mascotaId', () => pm.expect(pm.response.json().message).to.include('property mascotaId should not exist'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mascotaId\": \"{{mascotaId}}\",\n  \"nombreVacuna\": \"Rabia (registro de prueba)\",\n  \"fechaAplicacion\": \"2026-01-10\",\n  \"loteVacuna\": \"LOTE-PRUEBA-001\",\n  \"proximaDosis\": \"2027-01-10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vacunas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "vacunas"
+              ]
+            },
+            "description": "Vacunas usa `mascota_id` (guion bajo). Enviar `mascotaId` produce 400 y no se crea la vacuna."
           }
         }
       ]
@@ -1914,12 +2435,27 @@
       "type": "string"
     },
     {
+      "key": "usuarioEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "usuarioPassword",
       "value": "CambiarEsta123",
       "type": "string"
     },
     {
       "key": "usuarioId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "usuarioRol",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "usuarioCreadoId",
       "value": "",
       "type": "string"
     },
@@ -1957,6 +2493,32 @@
       "key": "permitirEliminacion",
       "value": "false",
       "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Ayuda común: explica los 401 de las rutas protegidas.",
+          "if (pm.response.code === 401 && !pm.variables.get('accessToken')) {",
+          "  console.warn('401: no hay accessToken. Ejecute \"Autenticación → Iniciar sesión\" con el entorno PetCare Local activo.');",
+          "} else if (pm.response.code === 401) {",
+          "  console.warn('401: el token es inválido o expiró, o las credenciales no son válidas. Vuelva a iniciar sesión.');",
+          "}"
+        ]
+      }
     }
   ]
 }

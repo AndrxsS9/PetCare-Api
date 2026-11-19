@@ -7,6 +7,21 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { HistoriasClinicasController } from './historias-clinicas.controller.js';
 import { HistoriasClinicasService } from './historias-clinicas.service.js';
+import type { AuthenticatedUser } from '../auth/auth.types.js';
+import { RolUsuario } from '../usuarios/usuario.dto.js';
+
+// Same shape as the user the JWT strategy attaches to `request.user`. ADMIN is
+// unrestricted by the ownership policy, so the original assertions still hold;
+// ownership-restricted behavior is covered in src/auth/ownership*.spec.ts.
+const adminUser: AuthenticatedUser = {
+  id: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d',
+  nombre: 'Admin',
+  email: 'admin@petcare.com',
+  telefono: '3000000000',
+  rol: RolUsuario.ADMIN,
+  estado: true,
+  mascotas: [],
+};
 
 // Uses Vitest globals (enabled in vitest.config.ts) rather than importing
 // from 'vitest', matching the other newer specs.
@@ -45,6 +60,11 @@ describe('HistoriasClinicasController (HTTP)', () => {
     }).compile();
 
     app = module.createNestApplication();
+    // Stands in for the global JwtAuthGuard, which sets request.user.
+    app.use((req: { user?: AuthenticatedUser }, _res: unknown, next: () => void) => {
+      req.user = adminUser;
+      next();
+    });
     // Same options as the global pipe registered in main.ts.
     app.useGlobalPipes(
       new ValidationPipe({
@@ -101,7 +121,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
         .get(`${baseUrl}/${historiaId}`)
         .expect(200);
 
-      expect(mockService.findById).toHaveBeenCalledWith(historiaId);
+      expect(mockService.findById).toHaveBeenCalledWith(historiaId, adminUser);
       expect(res.body).toEqual(response);
     });
 
@@ -119,6 +139,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
 
       expect(mockService.create).toHaveBeenCalledWith(
         expect.objectContaining(validPayload),
+        adminUser,
       );
       expect(res.body).toEqual(response);
     });
@@ -139,6 +160,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
       expect(mockService.update).toHaveBeenCalledWith(
         historiaId,
         expect.objectContaining(changes),
+        adminUser,
       );
       expect(res.body).toEqual(response);
     });
@@ -151,7 +173,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
         .delete(`${baseUrl}/${historiaId}`)
         .expect(200);
 
-      expect(mockService.delete).toHaveBeenCalledWith(historiaId);
+      expect(mockService.delete).toHaveBeenCalledWith(historiaId, adminUser);
       expect(res.body).toEqual(response);
     });
   });
@@ -173,7 +195,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
         .get(`${baseUrl}/${historiaId}`)
         .expect(404);
 
-      expect(mockService.findById).toHaveBeenCalledWith(historiaId);
+      expect(mockService.findById).toHaveBeenCalledWith(historiaId, adminUser);
       expect(res.body).toEqual(notFoundBody(historiaNotFound));
     });
 
@@ -190,6 +212,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
       expect(mockService.update).toHaveBeenCalledWith(
         historiaId,
         expect.objectContaining({ diagnostico: 'Control de rutina' }),
+        adminUser,
       );
       expect(res.body).toEqual(notFoundBody(historiaNotFound));
     });
@@ -203,7 +226,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
         .delete(`${baseUrl}/${historiaId}`)
         .expect(404);
 
-      expect(mockService.delete).toHaveBeenCalledWith(historiaId);
+      expect(mockService.delete).toHaveBeenCalledWith(historiaId, adminUser);
       expect(res.body).toEqual(notFoundBody(historiaNotFound));
     });
 
@@ -220,6 +243,7 @@ describe('HistoriasClinicasController (HTTP)', () => {
 
       expect(mockService.create).toHaveBeenCalledWith(
         expect.objectContaining(validPayload),
+        adminUser,
       );
       expect(res.body).toEqual(notFoundBody(mascotaNotFound));
     });
