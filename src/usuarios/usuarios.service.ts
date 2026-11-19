@@ -18,9 +18,23 @@ export class UsuariosService {
     private readonly usuarioRepository: Repository<UsuarioEntity>,
   ) {}
 
-  private sanitizeUser(usuario: UsuarioEntity): UsuarioResponse {
+  sanitizeUser(usuario: UsuarioEntity): UsuarioResponse {
     const { password: _, ...usuarioSinPassword } = usuario;
     return usuarioSinPassword;
+  }
+
+  /**
+   * Internal use by AuthService only: returns the full entity, INCLUDING the
+   * password hash, so credentials can be verified. Never return it to clients.
+   */
+  async findByEmailForAuth(email: string): Promise<UsuarioEntity | null> {
+    return this.usuarioRepository.findOne({ where: { email } });
+  }
+
+  /** Returns the user without the password hash, or null when it does not exist. */
+  async findSafeById(id: string): Promise<UsuarioResponse | null> {
+    const usuario = await this.usuarioRepository.findOne({ where: { id } });
+    return usuario ? this.sanitizeUser(usuario) : null;
   }
 
   async findAll(): Promise<UsuarioResponse[]> {
