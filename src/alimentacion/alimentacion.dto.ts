@@ -2,11 +2,13 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateAlimentacionDto {
-  @IsString()
+  @IsUUID()
   @IsNotEmpty()
   mascotaId: string;
 
@@ -19,7 +21,7 @@ export class CreateAlimentacionDto {
   marca: string;
 
   @IsNumber()
-  @IsNotEmpty()
+  @IsPositive()
   cantidad: number;
 
   @IsString()
@@ -41,26 +43,32 @@ export class CreateAlimentacionDto {
 
 export class UpdateAlimentacionDto {
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   tipoAlimento?: string;
 
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   marca?: string;
 
   @IsNumber()
+  @IsPositive()
   @IsOptional()
   cantidad?: number;
 
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   unidad?: string;
 
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   frecuencia?: string;
 
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   horario?: string;
 
